@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Lexicycle/">
+    <Project Path="src/Lexicycle/LexicycleApp/LexicycleApp.csproj" />
+    <Project Path="src/Lexicycle/LexicycleCore.Tests/LexicycleCore.Tests.csproj" />
+    <Project Path="src/Lexicycle/LexicycleCore/LexicycleCore.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    Machine-specific SDK locations live in Directory.Build.props.user, which is gitignored.
+    Copy Directory.Build.props.user.sample to Directory.Build.props.user and edit the paths
+    if `dotnet build` cannot find your JDK or Android SDK. Visual Studio and `dotnet build`
+    usually discover both on their own, in which case no user file is needed.
+  -->
+  <Import Project="Directory.Build.props.user" Condition="Exists('Directory.Build.props.user')" />
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

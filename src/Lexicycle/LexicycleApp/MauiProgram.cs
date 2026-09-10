@@ -1,0 +1,51 @@
+using LexicycleApp.Services;
+using LexicycleApp.ViewModels;
+using LexicycleApp.Views;
+using LexicycleCore.Services;
+using Microsoft.Extensions.Logging;
+
+namespace LexicycleApp;
+
+public static class MauiProgram
+{
+    /// <summary>Bundled vocabulary sets, as <c>MauiAsset</c> logical names.</summary>
+    private static readonly string[] BundledSets =
+    [
+        "sets/en-de-basics.json",
+        "sets/en-es-basics.json",
+    ];
+
+    public static MauiApp CreateMauiApp()
+    {
+        var builder = MauiApp.CreateBuilder();
+        builder
+            .UseMauiApp<App>()
+            .ConfigureFonts(fonts =>
+            {
+                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+                fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
+            });
+
+        // Services
+        builder.Services.AddSingleton<AppSettings>();
+        builder.Services.AddSingleton<IAssetProvider, MauiAssetProvider>();
+        builder.Services.AddSingleton<IVocabularySetRepository>(provider =>
+            new BundledJsonVocabularySetRepository(
+                provider.GetRequiredService<IAssetProvider>(),
+                BundledSets));
+
+        // Pages and view models. Transient so each navigation starts from clean state.
+        builder.Services.AddTransient<HomeViewModel>();
+        builder.Services.AddTransient<HomePage>();
+        builder.Services.AddTransient<SessionViewModel>();
+        builder.Services.AddTransient<SessionPage>();
+        builder.Services.AddTransient<SummaryViewModel>();
+        builder.Services.AddTransient<SummaryPage>();
+
+#if DEBUG
+        builder.Logging.AddDebug();
+#endif
+
+        return builder.Build();
+    }
+}

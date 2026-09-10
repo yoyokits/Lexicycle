@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--  Lexicycle additions on top of the template's Colors.xaml / Styles.xaml.  -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!--  Mid-tones chosen to stay legible on both the light and dark backgrounds.  -->
+    <Color x:Key="Success">#2E9E4F</Color>
+    <Color x:Key="Danger">#E53935</Color>
+
+    <!--  Secondary text: labels, captions, counts.  -->
+    <Style x:Key="SubtleLabel" TargetType="Label">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+    </Style>
+
+    <!--  Tappable panel used for set and summary rows.  -->
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="Padding" Value="16,14" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="Stroke" Value="{AppThemeBinding Light={StaticResource Gray200}, Dark={StaticResource Gray600}}" />
+        <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource White}, Dark={StaticResource Gray900}}" />
+        <Setter Property="StrokeShape">
+            <Setter.Value>
+                <RoundRectangle CornerRadius="12" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--  Low-emphasis button, e.g. "End session".  -->
+    <Style x:Key="SecondaryButton" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="Transparent" />
+        <Setter Property="TextColor" Value="{AppThemeBinding Light={StaticResource Gray500}, Dark={StaticResource Gray400}}" />
+        <Setter Property="BorderWidth" Value="0" />
+    </Style>
+
+</ResourceDictionary>
