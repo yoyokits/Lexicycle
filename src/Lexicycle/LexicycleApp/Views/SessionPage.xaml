@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage
+    x:Class="LexicycleApp.Views.SessionPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:LexicycleApp.ViewModels"
+    x:DataType="vm:SessionViewModel"
+    Title="{Binding SetName}">
+
+    <Grid Padding="20,16" RowDefinitions="Auto,*,Auto">
+
+        <!--  Progress  -->
+        <VerticalStackLayout Grid.Row="0" Spacing="6">
+            <Grid ColumnDefinitions="*,Auto">
+                <Label
+                    Grid.Column="0"
+                    FontAttributes="Bold"
+                    Style="{StaticResource SubtleLabel}"
+                    Text="{Binding RoundText}" />
+                <Label
+                    Grid.Column="1"
+                    Style="{StaticResource SubtleLabel}"
+                    Text="{Binding ProgressText}" />
+            </Grid>
+            <ProgressBar Progress="{Binding Progress}" ProgressColor="{StaticResource Primary}" />
+        </VerticalStackLayout>
+
+        <!--  Prompt  -->
+        <VerticalStackLayout
+            Grid.Row="1"
+            Spacing="12"
+            VerticalOptions="Center">
+
+            <Label
+                FontAttributes="Bold"
+                FontSize="40"
+                HorizontalTextAlignment="Center"
+                Text="{Binding CurrentWord}" />
+
+            <Label
+                HorizontalTextAlignment="Center"
+                IsVisible="{Binding HasHint}"
+                Style="{StaticResource SubtleLabel}"
+                Text="{Binding Hint}" />
+
+            <Label
+                Margin="0,8,0,0"
+                FontSize="18"
+                HorizontalTextAlignment="Center"
+                IsVisible="{Binding HasFeedback}"
+                Text="{Binding FeedbackText}">
+                <Label.Triggers>
+                    <DataTrigger
+                        Binding="{Binding FeedbackIsMiss}"
+                        TargetType="Label"
+                        Value="True">
+                        <Setter Property="TextColor" Value="{StaticResource Danger}" />
+                    </DataTrigger>
+                    <DataTrigger
+                        Binding="{Binding FeedbackIsMiss}"
+                        TargetType="Label"
+                        Value="False">
+                        <Setter Property="TextColor" Value="{StaticResource Success}" />
+                    </DataTrigger>
+                </Label.Triggers>
+            </Label>
+
+            <Label
+                HorizontalTextAlignment="Center"
+                IsVisible="{Binding HasError}"
+                Text="{Binding ErrorMessage}"
+                TextColor="{StaticResource Danger}" />
+        </VerticalStackLayout>
+
+        <!--  Answer  -->
+        <VerticalStackLayout Grid.Row="2" Spacing="12">
+            <Entry
+                x:Name="AnswerEntry"
+                ClearButtonVisibility="WhileEditing"
+                FontSize="20"
+                IsEnabled="{Binding CanType}"
+                Placeholder="Type the translation"
+                ReturnCommand="{Binding SubmitCommand}"
+                ReturnType="Done"
+                Text="{Binding Answer}" />
+
+            <Button Command="{Binding SubmitCommand}" Text="{Binding ActionButtonText}" />
+
+            <Button
+                Command="{Binding QuitCommand}"
+                Style="{StaticResource SecondaryButton}"
+                Text="End session" />
+        </VerticalStackLayout>
+
+        <ActivityIndicator
+            Grid.Row="1"
+            IsRunning="{Binding IsLoading}"
+            IsVisible="{Binding IsLoading}"
+            VerticalOptions="Center" />
+    </Grid>
+</ContentPage>

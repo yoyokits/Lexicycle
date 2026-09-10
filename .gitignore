@@ -427,3 +427,17 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# ---- Lexicycle ----
+# Machine-specific SDK paths (copy Directory.Build.props.user.sample)
+Directory.Build.props.user
+
+# Upstream Wiktionary dumps — hundreds of MB, re-downloadable
+data/raw/
+
+# Python tooling
+src/python/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/

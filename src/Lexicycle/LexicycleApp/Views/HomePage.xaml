@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage
+    x:Class="LexicycleApp.Views.HomePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:models="clr-namespace:LexicycleCore.Models;assembly=LexicycleCore"
+    xmlns:vm="clr-namespace:LexicycleApp.ViewModels"
+    x:DataType="vm:HomeViewModel"
+    Title="Lexicycle">
+
+    <Grid Padding="20,16" RowDefinitions="Auto,*,Auto">
+
+        <Label
+            Grid.Row="0"
+            Margin="0,0,0,12"
+            Style="{StaticResource SubtleLabel}"
+            Text="Pick a set to practise. Missed words come back each round until you get them right." />
+
+        <CollectionView
+            Grid.Row="1"
+            ItemsSource="{Binding Sets}"
+            SelectionMode="None">
+
+            <CollectionView.EmptyView>
+                <Label
+                    HorizontalTextAlignment="Center"
+                    Style="{StaticResource SubtleLabel}"
+                    Text="No vocabulary sets available." />
+            </CollectionView.EmptyView>
+
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="models:VocabularySet">
+                    <Border Margin="0,0,0,10" Style="{StaticResource Card}">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:HomeViewModel}}, Path=StartCommand}"
+                                CommandParameter="{Binding .}" />
+                        </Border.GestureRecognizers>
+
+                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                            <Label
+                                Grid.Row="0"
+                                Grid.Column="0"
+                                FontAttributes="Bold"
+                                FontSize="18"
+                                Text="{Binding Name}" />
+
+                            <Label
+                                Grid.Row="1"
+                                Grid.Column="0"
+                                Style="{StaticResource SubtleLabel}"
+                                Text="{Binding WordCount, StringFormat='{0} words'}" />
+
+                            <Label
+                                Grid.Row="0"
+                                Grid.RowSpan="2"
+                                Grid.Column="1"
+                                FontAttributes="Bold"
+                                FontSize="14"
+                                Text="{Binding LanguagePair}"
+                                TextColor="{StaticResource Primary}"
+                                VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <ActivityIndicator
+            Grid.Row="1"
+            IsRunning="{Binding IsBusy}"
+            IsVisible="{Binding IsBusy}"
+            VerticalOptions="Center" />
+
+        <VerticalStackLayout Grid.Row="2" Spacing="10">
+            <Label
+                IsVisible="{Binding HasError}"
+                Style="{StaticResource SubtleLabel}"
+                Text="{Binding ErrorMessage}"
+                TextColor="{StaticResource Danger}" />
+
+            <Grid ColumnDefinitions="*,Auto">
+                <VerticalStackLayout Grid.Column="0">
+                    <Label FontSize="15" Text="Ignore accents" />
+                    <Label
+                        Style="{StaticResource SubtleLabel}"
+                        Text="Accept &quot;Madchen&quot; or &quot;Maedchen&quot; for &quot;Mädchen&quot;." />
+                </VerticalStackLayout>
+
+                <Switch
+                    Grid.Column="1"
+                    IsToggled="{Binding LenientDiacritics}"
+                    VerticalOptions="Center" />
+            </Grid>
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>

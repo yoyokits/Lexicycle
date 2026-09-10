@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage
+    x:Class="LexicycleApp.Views.SummaryPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:LexicycleApp.ViewModels"
+    x:DataType="vm:SummaryViewModel"
+    Title="Summary">
+
+    <!--
+        The CollectionView sits directly in the star row. Nesting it inside a
+        VerticalStackLayout makes it measure against infinite height, which collapses
+        every other row in the Grid to zero.
+    -->
+    <Grid Padding="20,16" RowDefinitions="Auto,Auto,*,Auto">
+
+        <VerticalStackLayout Grid.Row="0" Spacing="6">
+            <Label
+                FontAttributes="Bold"
+                FontSize="32"
+                Text="{Binding Headline}" />
+            <Label Style="{StaticResource SubtleLabel}" Text="{Binding Detail}" />
+        </VerticalStackLayout>
+
+        <Label
+            Grid.Row="1"
+            Margin="0,24,0,10"
+            FontAttributes="Bold"
+            IsVisible="{Binding HasMissedWords}"
+            Text="Worth another look" />
+
+        <CollectionView
+            Grid.Row="2"
+            ItemsSource="{Binding MissedWords}"
+            SelectionMode="None">
+
+            <CollectionView.EmptyView>
+                <Label
+                    HorizontalTextAlignment="Center"
+                    Style="{StaticResource SubtleLabel}"
+                    Text="Nothing missed — every word was right first time."
+                    VerticalOptions="Center" />
+            </CollectionView.EmptyView>
+
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="vm:MissedWordRow">
+                    <Border Margin="0,0,0,8" Style="{StaticResource Card}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label
+                                Grid.Column="0"
+                                FontAttributes="Bold"
+                                FontSize="17"
+                                VerticalOptions="Center">
+                                <Label.Text>
+                                    <MultiBinding StringFormat="{}{0} → {1}">
+                                        <Binding Path="Source" />
+                                        <Binding Path="Answer" />
+                                    </MultiBinding>
+                                </Label.Text>
+                            </Label>
+
+                            <Label
+                                Grid.Column="1"
+                                Style="{StaticResource SubtleLabel}"
+                                Text="{Binding MissText}"
+                                VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <Button
+            Grid.Row="3"
+            Margin="0,12,0,0"
+            Command="{Binding DoneCommand}"
+            Text="Back to sets" />
+    </Grid>
+</ContentPage>

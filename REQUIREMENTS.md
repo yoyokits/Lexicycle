@@ -1,0 +1,43 @@
+# Requirements — open
+
+Source of truth for scope. Each item has a stable id (`R-NNN`). When an item is
+finished **and verified**, move its line to `REQUIREMENTS-DONE.md` with the date, so
+this file only ever shows outstanding work.
+
+Phases are described in `docs/ROADMAP.md`.
+
+---
+
+## Phase 3 — Dictionary in the app
+
+- [ ] **R-301** Decide bundled-SQLite vs bundled-JSON from the `report` numbers, and record the decision in `docs/DATA-SOURCES.md`.
+- [ ] **R-302** Add `sqlite-net-pcl` and a `SqliteVocabularyRepository` in `LexicycleCore` behind the existing `IVocabularySetRepository`.
+- [ ] **R-303** Bundle the generated `lexicycle-dict-en-de.db` as a `MauiAsset` and copy it to `AppDataDirectory` on first run.
+- [ ] **R-304** "Generate session from dictionary": pick N words at random or from a chosen frequency band.
+- [ ] **R-305** Practise German → English as well as English → German (reverse the pair at session start).
+- [ ] **R-306** About screen crediting Wiktionary and the upstream dataset under CC-BY-SA 4.0.
+
+## Phase 4 — OCR photo input
+
+- [ ] **R-401** Capture or pick a page photo with `MediaPicker`, with the camera and storage permissions handled.
+- [ ] **R-402** On-device text recognition with ML Kit (offline; no cloud OCR).
+- [ ] **R-403** Tokenise and normalise recognised text into candidate words.
+- [ ] **R-404** Match candidates against the dictionary and build an ad-hoc vocabulary set.
+- [ ] **R-405** Review screen before starting: correct OCR errors, drop junk tokens.
+
+## Phase 5 — Enrichment
+
+- [ ] **R-501** Show grammatical gender and part of speech during practice (data already in `words_de`).
+- [ ] **R-502** Example sentences, sourced from the fuller upstream dataset, as a side table.
+- [ ] **R-503** Frequency-banded practice ("the 500 most common words").
+- [ ] **R-504** Additional language pairs (`en-es`, `de-es`) via the pair-parameterised pipeline.
+- [ ] **R-505** User-created and imported vocabulary sets.
+- [ ] **R-506** Session history persisted locally, with per-word progress over time.
+- [ ] **R-507** Spaced repetition scheduling across sessions.
+
+## Cross-cutting
+
+- [ ] **R-601** Accessibility pass: `SemanticProperties` on the prompt, answer entry and feedback.
+- [ ] **R-602** Dark theme verified on every screen.
+- [ ] **R-603** CI workflow running `dotnet test` and `pytest`.
+- [ ] **R-604** Release build verified with trimming enabled (the JSON source generator must hold up).
