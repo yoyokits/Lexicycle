@@ -97,6 +97,15 @@ python -m venv .venv && ./.venv/Scripts/python.exe -m pip install -e ".[dev]"
 The pipeline tests run against a small in-code fixture shaped like the real dataset,
 so the whole transform is testable without the download.
 
+## Generated sessions
+
+"Practice" on the home screen draws from the bundled dictionary and never repeats a word
+until `ReviewSchedule` says it is due. Fixed sets (bundled JSON, later OCR) bypass
+rotation — see `docs/ARCHITECTURE.md`.
+
+Two SQLite files: the dictionary is a read-only `MauiAsset` copied to app data on first
+run; `progress.db` is separate so a dictionary update never wipes progress.
+
 ## Platform gotchas worth remembering
 
 - **Never navigate while the soft keyboard is open.** Android lays the incoming page
@@ -110,6 +119,11 @@ so the whole transform is testable without the download.
   to `IsVisible` does not convert.
 - `System.Text.Json` needs the source-generated `VocabularySetJsonContext`; the
   trimmer strips reflection-based serialisation in Release Android builds.
+- **`adb shell input text` is ASCII-only.** Typing "Rücken" silently does nothing, so a
+  scripted session stalls forever on the first umlaut and looks like an app bug. Send the
+  ASCII fallback ("Ruecken") — lenient matching accepts it.
+- **`adb shell cat` corrupts binary files** with CRLF translation. Use
+  `adb exec-out "run-as <pkg> cat <path>"` to pull a database off the device.
 
 ## Conventions
 

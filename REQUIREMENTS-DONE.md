@@ -46,3 +46,12 @@ Completed and verified requirements, moved here from `REQUIREMENTS.md`.
 - [x] **R-207** `report` step printing row counts and on-disk size for N = 1k / 5k / 10k / 50k / all.
 - [x] **R-208** `export-json` step emitting a `VocabularySet`-shaped file the app can consume before any on-device SQLite work.
 - [x] **R-209** Fixture-based pytest suite (57 tests) covering extraction, primary-sense selection, schema, de-duplication, the top-N cut and the exporter — no download required.
+
+## Phase 3 — Dictionary in the app · 2026-09-11
+
+- [x] **R-302** `sqlite-net-pcl` in `LexicycleCore`, with `SqliteDictionaryStore` (read-only) and `SqliteProgressStore` (read-write).
+- [x] **R-303** The generated dictionary bundled as a `MauiAsset` and copied to app data on first run, versioned so a future dictionary refreshes the copy.
+- [x] **R-304** "Practice" on the home screen generates a session from the dictionary, most frequent words first.
+- [x] **R-506** Per-word progress persisted in its own database file, so shipping a new dictionary never discards it. Survives app restart.
+- [x] **R-507** `ReviewSchedule`: a Leitner scheme counted in sessions rather than days. A miss returns a word to box 0 for the next session; correct answers push it out 5, 12, 30 then 90 sessions before it is mastered.
+- [x] **R-309** Consecutive generated sessions ask different words. Externally chosen sets — bundled JSON, and later OCR — bypass rotation entirely and drill exactly what they were given. Verified on-device across three sessions with zero overlap.

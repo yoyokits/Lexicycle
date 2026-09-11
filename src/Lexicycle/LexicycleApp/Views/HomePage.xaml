@@ -10,11 +10,48 @@
 
     <Grid Padding="20,16" RowDefinitions="Auto,*,Auto">
 
-        <Label
-            Grid.Row="0"
-            Margin="0,0,0,12"
-            Style="{StaticResource SubtleLabel}"
-            Text="Pick a set to practise. Missed words come back each round until you get them right." />
+        <VerticalStackLayout Grid.Row="0" Spacing="12">
+            <Label
+                Style="{StaticResource SubtleLabel}"
+                Text="Missed words come back each round until you get them right." />
+
+            <!--  The dictionary-backed session: different words every time.  -->
+            <Border Style="{StaticResource Card}">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding StartPracticeCommand}" />
+                </Border.GestureRecognizers>
+
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                    <Label
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        FontAttributes="Bold"
+                        FontSize="18"
+                        Text="Practice" />
+
+                    <Label
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        Style="{StaticResource SubtleLabel}"
+                        Text="{Binding PracticeSubtitle}" />
+
+                    <Label
+                        Grid.Row="0"
+                        Grid.RowSpan="2"
+                        Grid.Column="1"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        Text="en → de"
+                        TextColor="{StaticResource Primary}"
+                        VerticalOptions="Center" />
+                </Grid>
+            </Border>
+
+            <Label
+                Margin="0,8,0,0"
+                Style="{StaticResource SubtleLabel}"
+                Text="Or pick a fixed set:" />
+        </VerticalStackLayout>
 
         <CollectionView
             Grid.Row="1"

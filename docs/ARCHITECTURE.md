@@ -63,6 +63,40 @@ is independent of the article rule, which is always on.
 A `WordPair` carries a list of acceptable answers, so "Auto" and "Wagen" both pass for
 "car". The first entry is what gets shown on a miss.
 
+## Generated sessions and progress
+
+Tapping **Practice** draws its words from the bundled dictionary rather than a fixed
+list, and consecutive sessions ask different things.
+
+`PracticeSessionFactory` is the only path that consults progress. Sets chosen
+deliberately — the bundled JSON, and later an OCR'd page — go straight to the engine with
+exactly the words they were given, because rotating those away would be wrong.
+
+`ReviewSchedule` is a Leitner scheme counted in **sessions, not days**, so someone
+practising twice a week gets the same sequence as someone practising twice a day:
+
+| Box | Meaning | Returns after |
+| --- | --- | --- |
+| 0 | being learned, or just missed | the next session |
+| 1-4 | answered correctly N times | 5, 12, 30, 90 sessions |
+| 5 | mastered | never |
+
+A miss drops a word straight back to box 0 — it needs relearning, not a longer wait. The
+first correct interval is deliberately long: variety is the point, so a word answered
+correctly should stay away for a while.
+
+`SessionComposer` caps revision at half a session so new material keeps arriving, then
+lifts that cap once the dictionary runs out of unseen words. If nothing is new and
+nothing is due, it returns an empty plan and the UI says so rather than repeating.
+
+Two database files, deliberately separate:
+
+- `lexicycle-dict-en-de.db` — the generated dictionary, bundled as a `MauiAsset` and
+  copied to app data on first run (a `MauiAsset` cannot be opened as a file on Android).
+  Read-only.
+- `progress.db` — created on demand in app data. Keeping it apart means shipping an
+  updated dictionary never discards a learner's history.
+
 ## The repository seam
 
 ```csharp

@@ -1,6 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LexicycleApp.Services;
+using LexicycleCore.Dictionary;
+using LexicycleCore.Models;
 using LexicycleCore.Services;
 using LexicycleCore.Session;
 
@@ -14,8 +16,16 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
 {
     private readonly IVocabularySetRepository _repository;
     private readonly AppSettings _settings;
+    private readonly AppDatabases _databases;
 
     private SessionEngine? _engine;
+
+    /// <summary>
+    /// Set only for generated sessions. Bundled and (later) OCR'd sets leave this null,
+    /// because their words were chosen deliberately and must not feed the rotation.
+    /// </summary>
+    private PracticeSessionFactory.PracticeSession? _practice;
+    private PracticeSessionFactory? _factory;
 
     [ObservableProperty]
     private string _setName = string.Empty;
@@ -57,10 +67,14 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     [ObservableProperty]
     private bool _awaitingContinue;
 
-    public SessionViewModel(IVocabularySetRepository repository, AppSettings settings)
+    public SessionViewModel(
+        IVocabularySetRepository repository,
+        AppSettings settings,
+        AppDatabases databases)
     {
         _repository = repository;
         _settings = settings;
+        _databases = databases;
     }
 
     /// <summary>
@@ -116,10 +130,19 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
 
         try
         {
-            var set = await _repository.GetByIdAsync(setId);
+            var set = setId == PracticeSessionFactory.GeneratedSetId
+                ? await StartGeneratedSessionAsync()
+                : await _repository.GetByIdAsync(setId);
+
             if (set is null)
             {
                 ErrorMessage = $"Vocabulary set '{setId}' was not found.";
+                return;
+            }
+
+            if (set.WordCount == 0)
+            {
+                ErrorMessage = "Nothing new to practise right now — come back after a break.";
                 return;
             }
 
@@ -135,6 +158,20 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
         {
             IsLoading = false;
         }
+    }
+
+    /// <summary>
+    /// Draws the next batch of words from the dictionary, skipping anything practised
+    /// recently so consecutive sessions differ.
+    /// </summary>
+    private async Task<VocabularySet> StartGeneratedSessionAsync()
+    {
+        _factory = new PracticeSessionFactory(
+            await _databases.GetDictionaryAsync(),
+            _databases.Progress);
+
+        _practice = await _factory.CreateAsync();
+        return _practice.Set;
     }
 
     /// <summary>
@@ -193,6 +230,20 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     private async Task GoToSummaryAsync()
     {
         var summary = _engine!.BuildSummary();
+
+        // Remember what was asked so the next generated session picks different words.
+        // Failing to save must not cost the learner their summary screen.
+        if (_practice is not null && _factory is not null)
+        {
+            try
+            {
+                await _factory.RecordAsync(_practice, summary);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Could not save progress: {ex}");
+            }
+        }
 
         await DismissKeyboardAsync();
 

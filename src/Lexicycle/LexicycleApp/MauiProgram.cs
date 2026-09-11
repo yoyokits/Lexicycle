@@ -30,6 +30,7 @@ public static class MauiProgram
 
         // Services
         builder.Services.AddSingleton<AppSettings>();
+        builder.Services.AddSingleton<AppDatabases>();
         builder.Services.AddSingleton<IAssetProvider, MauiAssetProvider>();
         builder.Services.AddSingleton<IVocabularySetRepository>(provider =>
             new BundledJsonVocabularySetRepository(

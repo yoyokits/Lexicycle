@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LexicycleApp.Services;
+using LexicycleCore.Dictionary;
 using LexicycleCore.Models;
 using LexicycleCore.Services;
 
@@ -12,6 +13,7 @@ public sealed partial class HomeViewModel : ObservableObject
 {
     private readonly IVocabularySetRepository _repository;
     private readonly AppSettings _settings;
+    private readonly AppDatabases _databases;
 
     [ObservableProperty]
     private bool _isBusy;
@@ -19,10 +21,17 @@ public sealed partial class HomeViewModel : ObservableObject
     [ObservableProperty]
     private string? _errorMessage;
 
-    public HomeViewModel(IVocabularySetRepository repository, AppSettings settings)
+    [ObservableProperty]
+    private string _practiceSubtitle = "Draws new words each time";
+
+    public HomeViewModel(
+        IVocabularySetRepository repository,
+        AppSettings settings,
+        AppDatabases databases)
     {
         _repository = repository;
         _settings = settings;
+        _databases = databases;
     }
 
     public ObservableCollection<VocabularySet> Sets { get; } = [];
@@ -67,6 +76,8 @@ public sealed partial class HomeViewModel : ObservableObject
             {
                 Sets.Add(set);
             }
+
+            await RefreshPracticeSubtitleAsync();
         }
         catch (Exception ex)
         {
@@ -77,6 +88,31 @@ public sealed partial class HomeViewModel : ObservableObject
             IsBusy = false;
         }
     }
+
+    /// <summary>Shows how far through the dictionary the learner is.</summary>
+    private async Task RefreshPracticeSubtitleAsync()
+    {
+        try
+        {
+            var dictionary = await _databases.GetDictionaryAsync();
+            var total = await dictionary.CountAsync();
+            var seen = (await _databases.Progress.GetAllAsync()).Count;
+
+            PracticeSubtitle = seen == 0
+                ? $"{total:N0} words · draws new ones each time"
+                : $"{seen:N0} of {total:N0} words started";
+        }
+        catch (Exception ex)
+        {
+            // The bundled sets still work without the dictionary, so this is not fatal.
+            System.Diagnostics.Debug.WriteLine($"Dictionary unavailable: {ex}");
+            PracticeSubtitle = "Draws new words each time";
+        }
+    }
+
+    [RelayCommand]
+    private static Task StartPracticeAsync()
+        => Shell.Current.GoToAsync($"{Routes.Session}?setId={PracticeSessionFactory.GeneratedSetId}");
 
     [RelayCommand]
     private static Task StartAsync(VocabularySet? set)
