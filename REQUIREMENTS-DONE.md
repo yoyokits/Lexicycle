@@ -16,6 +16,7 @@ Completed and verified requirements, moved here from `REQUIREMENTS.md`.
 - [x] **R-101** `WordPair` (source, acceptable answers, optional hint) and `VocabularySet` (name, languages, words).
 - [x] **R-102** `AnswerComparer`: trims, collapses internal whitespace, ignores case.
 - [x] **R-103** Multiple acceptable answers per word ("Auto" or "Wagen" for "car").
+- [x] **R-120** A leading article is optional in both directions: "das Haus" and "Haus" are both correct, whichever the set stores. German, Spanish and English articles; a bare article stays a word in its own right. Verified on-device.
 - [x] **R-104** Configurable diacritics leniency, default lenient; also accepts the German ASCII fallback (`Maedchen`, `Strasse`). Verified on-device.
 - [x] **R-105** `SessionEngine`: correct answers retire a word; misses defer to the next round and are never re-asked immediately.
 - [x] **R-106** A round asks each of its words exactly once; the next round contains only the missed ones.

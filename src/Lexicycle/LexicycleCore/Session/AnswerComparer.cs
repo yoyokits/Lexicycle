@@ -6,7 +6,9 @@ namespace LexicycleCore.Session;
 
 /// <summary>
 /// Decides whether a typed answer counts as correct.
-/// Always trims and ignores case; optionally ignores diacritics.
+///
+/// Always trims, ignores case, and treats a leading article as optional — "das Haus"
+/// and "Haus" are the same answer. Diacritics leniency is configurable.
 /// </summary>
 public sealed class AnswerComparer
 {
@@ -48,7 +50,6 @@ public sealed class AnswerComparer
 
     /// <summary>
     /// Every spelling of <paramref name="value"/> that should be treated as the same answer.
-    /// Strict mode yields exactly one form, so comparison stays an exact (case-folded) match.
     /// </summary>
     private HashSet<string> CandidateForms(string value)
     {
@@ -64,7 +65,54 @@ public sealed class AnswerComparer
             forms.Add(TransliterateGerman(basic));
         }
 
+        // A leading article is optional on both sides, so "das Haus" and "Haus" match
+        // whichever way round they appear. Applied to every form already collected so it
+        // composes with the diacritics rules ("die Straße" also matches "strasse").
+        foreach (var form in forms.ToList())
+        {
+            if (StripLeadingArticle(form) is { } withoutArticle)
+            {
+                forms.Add(withoutArticle);
+            }
+        }
+
         return forms;
+    }
+
+    /// <summary>
+    /// Definite and indefinite articles of the languages Lexicycle practises. English is
+    /// included for the reverse direction.
+    /// </summary>
+    private static readonly HashSet<string> Articles = new(StringComparer.Ordinal)
+    {
+        // German
+        "der", "die", "das", "den", "dem", "des",
+        "ein", "eine", "einen", "einem", "einer", "eines",
+        // Spanish
+        "el", "la", "los", "las", "un", "una", "unos", "unas",
+        // English
+        "the", "a", "an",
+    };
+
+    /// <summary>
+    /// Drops one leading article, or returns null when there is none to drop.
+    /// A bare article is left alone — "die" on its own is the answer, not a prefix.
+    /// </summary>
+    private static string? StripLeadingArticle(string value)
+    {
+        var space = value.IndexOf(' ');
+        if (space <= 0)
+        {
+            return null;
+        }
+
+        if (!Articles.Contains(value[..space]))
+        {
+            return null;
+        }
+
+        var remainder = value[(space + 1)..];
+        return remainder.Length == 0 ? null : remainder;
     }
 
     /// <summary>Trims the ends and collapses any internal whitespace run to a single space.</summary>

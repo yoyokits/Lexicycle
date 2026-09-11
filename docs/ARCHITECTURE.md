@@ -43,15 +43,22 @@ hardest-first.
 
 ## Answer checking
 
-`AnswerComparer` always trims, collapses internal whitespace and ignores case. With
-lenient diacritics on (the default) it also accepts:
+`AnswerComparer` always trims, collapses internal whitespace and ignores case. It also
+treats a **leading article as optional in both directions**, so `das Haus` and `Haus` are
+the same answer whichever one the set happens to store. German, Spanish and English
+articles are recognised; a bare article is left alone, because "die" on its own can be
+the answer rather than a prefix. Gender is taught through the hint (`das … (neuter)`),
+not enforced by the grader, so a wrong article does not fail an otherwise correct noun.
+
+With lenient diacritics on (the default) it additionally accepts:
 
 - the diacritic-stripped spelling — `Cafe` for `Café`, `Madchen` for `Mädchen`
 - the German ASCII fallback — `Maedchen` for `Mädchen`, `Strasse` for `Straße`
 
 It does this by expanding both sides into a small set of candidate spellings and testing
-for any overlap, so adding another normalisation later is one more entry in that set.
-In strict mode only the exact spelling (case-folded) is accepted.
+for any overlap, so adding another normalisation later is one more entry in that set —
+and the rules compose, so `die Straße` matches a typed `strasse`. Diacritics strictness
+is independent of the article rule, which is always on.
 
 A `WordPair` carries a list of acceptable answers, so "Auto" and "Wagen" both pass for
 "car". The first entry is what gets shown on a miss.
@@ -110,4 +117,4 @@ hide, and lets the insets settle before any `GoToAsync`.
   the JSON sets the app actually ships (parseable, unique prompts, every answer accepted
   by the comparer, no hint containing its own answer, a clean run finishing in one round).
 - `src/python/tests` covers the pipeline against an in-code fixture shaped like the real
-  dataset, so extraction and schema are testable without the 287 MB download.
+  dataset, so extraction and schema are testable without the 3.2 GB download.
