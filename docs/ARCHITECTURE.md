@@ -68,9 +68,35 @@ A `WordPair` carries a list of acceptable answers, so "Auto" and "Wagen" both pa
 Tapping **Practice** draws its words from the bundled dictionary rather than a fixed
 list, and consecutive sessions ask different things.
 
-`PracticeSessionFactory` is the only path that consults progress. Sets chosen
-deliberately — the bundled JSON, and later an OCR'd page — go straight to the engine with
-exactly the words they were given, because rotating those away would be wrong.
+Two factories build sessions, and **both** consult progress:
+
+| Factory | Source | Session size |
+| --- | --- | --- |
+| `PracticeSessionFactory` | the generated dictionary | `DefaultSize` (10) |
+| `FixedSetSessionFactory` | a bundled JSON set, later an OCR'd page | `SizeFor(count)` |
+
+Fixed sets were originally drilled whole on every visit, on the reasoning that their
+words had been chosen deliberately. That was wrong: opening "German basics" twice asked
+the identical twelve questions, forever. A set is a pool to draw from, not a script to
+replay.
+
+`FixedSetSessionFactory.SizeFor` takes **half the set**, capped at `DefaultSize`. Never
+more: a session using the whole set cannot avoid repeating it, and one using most of it
+leaves too little for the next visit — twelve words asked ten at a time gives a follow-up
+of two. Halving guarantees two disjoint sessions back to back.
+
+### Scoping
+
+Word ids are unique only within a pool: the dictionary numbers words from `words_en`, a
+fixed set numbers its own words by position. `ProgressScope` keeps them apart —
+`"dictionary"` or `"set:<id>"` — and every progress query is scoped.
+
+**Session numbering is per-scope too.** A global counter would let dictionary practice
+advance German basics' rotation, so its no-repeat rule would be satisfied by sessions the
+learner never played there.
+
+The milestone bar counts the dictionary scope only. A twelve-word bundled set is not
+progress through a 3,545-word dictionary, so finishing one raises no milestone.
 
 **Word order depends on whether frequency is known.**
 
@@ -93,8 +119,10 @@ A fixed set is still asked in full: shuffling changes the order, not the members
 
 `SessionComposer` applies four rules, in priority order:
 
-1. **At least 80% new** (`MinNewShare`). A ten-word session is eight words the learner has
-   never been asked, taken most-common-first from the frequency-ranked dictionary.
+1. **At least 80% new** (`MinNewShare`), measured on the session *delivered*, not the size
+   requested. A ten-word session is eight words never asked before, taken
+   most-common-first. If there is not enough new material the session **shrinks**; with
+   none at all it is **empty**, and the caller reports the pool finished.
 2. **The remainder is revision, weighted by failures.** A word's chance of being drawn is
    proportional to how often it has been answered *wrong*, plus one.
 3. **Sampled, not sorted.** Revision is drawn by weighted random sampling rather than by
@@ -107,13 +135,28 @@ A fixed set is still asked in full: shuffling changes the order, not the members
 The `+1` weight floor matters: a word that has never been missed still has a small chance
 of returning, so revision does not degenerate into drilling only the failures.
 
+Revision is therefore capped by how much new material exists, not by the requested size:
+`review ≤ fresh / MinNewShare − fresh`, which is a quarter of the new words at 80%. Zero
+new words allow zero revision.
+
+That cap is the whole answer to "why does it keep asking me the same words". An earlier
+version padded a session back up to full size out of the already-answered pool whenever
+new material ran short, which turned a twelve-word set into an endless loop of the same
+twelve questions. Nothing is replayed now: a pool with nothing unasked is *finished*.
+
+> The floating-point tolerance in `ReviewBudget` is load-bearing. `8 / 0.8` is
+> `10.000000000000002` and `4 / 0.8` is `4.999999999999999`, so a bare `floor` would allow
+> two review words in one case and none in the other under the same rule.
+
 Consequences worth knowing:
 
 - **Small sessions never revise.** `ceil(size × 0.8)` leaves no room below size 5, so a
   four-word session is entirely new. `PracticeSessionFactory.DefaultSize` is 10, which
   gives 8 new + 2 review.
-- **An exhausted dictionary yields a pure-revision session** rather than an empty one; the
-  80% floor cannot be met, so revision takes the whole session. Rule 4 still applies.
+- **A finished pool yields an empty session.** For the dictionary that is ~350 sessions
+  away. For a bundled set it arrives quickly by design — twelve words, six per visit, done
+  in two — and `SessionViewModel` then offers **Start this set again**, which calls
+  `ResetScopeAsync` on that set alone.
 
 ### Mastery
 

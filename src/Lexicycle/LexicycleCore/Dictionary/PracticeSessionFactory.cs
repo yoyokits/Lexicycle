@@ -50,8 +50,12 @@ public sealed class PracticeSessionFactory
         int size = DefaultSize,
         CancellationToken cancellationToken = default)
     {
-        var seen = await _progress.GetAllAsync(cancellationToken).ConfigureAwait(false);
-        var sessionNumber = await _progress.BeginSessionAsync(cancellationToken).ConfigureAwait(false);
+        var seen = await _progress
+            .GetAllAsync(ProgressScope.Dictionary, cancellationToken)
+            .ConfigureAwait(false);
+        var sessionNumber = await _progress
+            .BeginSessionAsync(ProgressScope.Dictionary, cancellationToken)
+            .ConfigureAwait(false);
 
         // Only words never asked before are candidates for the "new" half.
         var alreadySeen = seen.Select(progress => progress.WordId).ToHashSet();
@@ -107,7 +111,7 @@ public sealed class PracticeSessionFactory
         }
 
         await _progress
-            .RecordAsync(session.SessionNumber, outcomes, cancellationToken)
+            .RecordAsync(ProgressScope.Dictionary, session.SessionNumber, outcomes, cancellationToken)
             .ConfigureAwait(false);
     }
 }

@@ -21,12 +21,13 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
 
     private SessionEngine? _engine;
 
-    /// <summary>
-    /// Set only for generated sessions. Bundled and (later) OCR'd sets leave this null,
-    /// because their words were chosen deliberately and must not feed the rotation.
-    /// </summary>
+    /// <summary>Set only for dictionary-backed Practice sessions.</summary>
     private PracticeSessionFactory.PracticeSession? _practice;
     private PracticeSessionFactory? _factory;
+
+    /// <summary>Set only for fixed sets — the bundled JSON, and later an OCR'd page.</summary>
+    private FixedSetSessionFactory.FixedSetSession? _fixedSet;
+    private FixedSetSessionFactory? _fixedSetFactory;
 
     [ObservableProperty]
     private string _setName = string.Empty;
@@ -68,6 +69,15 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     [ObservableProperty]
     private bool _awaitingContinue;
 
+    /// <summary>
+    /// True when a fixed set has been exhausted, so the only way on is to start it over.
+    /// </summary>
+    [ObservableProperty]
+    private bool _canRestartSet;
+
+    /// <summary>Remembered so "Start this set again" can reload after clearing progress.</summary>
+    private string? _setId;
+
     public SessionViewModel(
         IVocabularySetRepository repository,
         AppSettings settings,
@@ -96,13 +106,28 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     /// <summary>The entry is locked while a miss is being acknowledged.</summary>
     public bool CanType => !AwaitingContinue && !IsLoading;
 
+    /// <summary>
+    /// Whether there is a question on screen to answer. False when the set is exhausted
+    /// or failed to load — an answer box reading "Type the translation" under no prompt
+    /// at all invites the learner to type into nothing.
+    /// </summary>
+    public bool IsAnswering => !HasError && !IsLoading;
+
     public string ActionButtonText => AwaitingContinue ? "Next" : "Check";
+
+    /// <summary>"End session" is the wrong words for a session that never started.</summary>
+    public string QuitButtonText => IsAnswering ? "End session" : "Back to sets";
 
     partial void OnFeedbackTextChanged(string? value) => OnPropertyChanged(nameof(HasFeedback));
 
     partial void OnHintChanged(string? value) => OnPropertyChanged(nameof(HasHint));
 
-    partial void OnErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasError));
+    partial void OnErrorMessageChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasError));
+        OnPropertyChanged(nameof(IsAnswering));
+        OnPropertyChanged(nameof(QuitButtonText));
+    }
 
     partial void OnAwaitingContinueChanged(bool value)
     {
@@ -110,7 +135,12 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
         OnPropertyChanged(nameof(ActionButtonText));
     }
 
-    partial void OnIsLoadingChanged(bool value) => OnPropertyChanged(nameof(CanType));
+    partial void OnIsLoadingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanType));
+        OnPropertyChanged(nameof(IsAnswering));
+        OnPropertyChanged(nameof(QuitButtonText));
+    }
 
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
@@ -128,6 +158,9 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     {
         IsLoading = true;
         ErrorMessage = null;
+        CanRestartSet = false;
+        _setId = setId;
+        _fixedSet = null;
 
         var isGenerated = setId == PracticeSessionFactory.GeneratedSetId;
 
@@ -135,7 +168,7 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
         {
             var set = isGenerated
                 ? await StartGeneratedSessionAsync()
-                : await _repository.GetByIdAsync(setId);
+                : await StartFixedSetSessionAsync(setId);
 
             if (set is null)
             {
@@ -145,17 +178,28 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
 
             if (set.WordCount == 0)
             {
-                ErrorMessage = "Nothing new to practise right now — come back after a break.";
+                // Every word has been asked. Nothing is replayed, so the set is finished
+                // until the learner deliberately starts it over.
+                if (_fixedSet is not null)
+                {
+                    ErrorMessage =
+                        "You have been through every word in this set. " +
+                        "Start it again to practise them a second time.";
+                    CanRestartSet = true;
+                }
+                else
+                {
+                    ErrorMessage = "Nothing new to practise right now — come back after a break.";
+                }
+
                 return;
             }
 
             SetName = set.Name;
 
             // A generated session is already ordered most-common-first, which is the order
-            // worth learning in, and its membership changes every session so a fixed order
-            // never feels repetitive. A fixed set has no frequency data and identical
-            // membership every visit, so its order is randomised instead — otherwise
-            // "German basics" opens on the same word forever.
+            // worth learning in. A fixed set has no frequency data, so its order is
+            // randomised — otherwise "German basics" opens on the same word forever.
             _engine = new SessionEngine(
                 isGenerated ? set : set.Shuffled(),
                 _settings.CreateComparer());
@@ -183,6 +227,24 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
 
         _practice = await _factory.CreateAsync();
         return _practice.Set;
+    }
+
+    /// <summary>
+    /// Draws a session from a bundled set, skipping what the last visit asked so opening
+    /// the same set twice does not replay the same questions.
+    /// </summary>
+    private async Task<VocabularySet?> StartFixedSetSessionAsync(string setId)
+    {
+        var set = await _repository.GetByIdAsync(setId);
+        if (set is null)
+        {
+            return null;
+        }
+
+        _fixedSetFactory = new FixedSetSessionFactory(_databases.Progress);
+        _fixedSet = await _fixedSetFactory.CreateAsync(set);
+
+        return _fixedSet.Set;
     }
 
     /// <summary>
@@ -264,20 +326,29 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     /// </summary>
     private async Task<int?> SaveProgressAsync(SessionSummary summary)
     {
-        if (_practice is null || _factory is null)
-        {
-            return null;
-        }
-
         try
         {
+            // A fixed set records its results so the next visit asks different words, but
+            // raises no milestone: the bar counts progress through the dictionary, and a
+            // twelve-word bundled set is not progress through it.
+            if (_fixedSet is not null && _fixedSetFactory is not null)
+            {
+                await _fixedSetFactory.RecordAsync(_fixedSet, summary);
+                return null;
+            }
+
+            if (_practice is null || _factory is null)
+            {
+                return null;
+            }
+
             var progress = _databases.Progress;
 
             // Measured either side of the write, so the comparison covers exactly this
             // session and a milestone can only ever be celebrated once.
-            var before = await progress.CountLearnedAsync();
+            var before = await progress.CountLearnedAsync(ProgressScope.Dictionary);
             await _factory.RecordAsync(_practice, summary);
-            var after = await progress.CountLearnedAsync();
+            var after = await progress.CountLearnedAsync(ProgressScope.Dictionary);
 
             return Milestones.Crossed(before, after);
         }
@@ -316,6 +387,29 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
         Progress = _engine.WordsInRound == 0
             ? 0
             : (double)(_engine.PositionInRound - 1) / _engine.WordsInRound;
+    }
+
+    /// <summary>
+    /// Clears this set's progress and reloads, so its words become new again. Scoped to
+    /// the one set: dictionary progress and every other set are untouched.
+    /// </summary>
+    [RelayCommand]
+    private async Task RestartSetAsync()
+    {
+        if (_fixedSet is null || _setId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _databases.Progress.ResetScopeAsync(_fixedSet.Scope);
+            await LoadAsync(_setId);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Could not restart the set: {ex.Message}";
+        }
     }
 
     [RelayCommand]

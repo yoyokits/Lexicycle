@@ -117,13 +117,13 @@ public sealed partial class HomeViewModel : ObservableObject
         {
             var dictionary = await _databases.GetDictionaryAsync();
             var total = await dictionary.CountAsync();
-            var seen = (await _databases.Progress.GetAllAsync()).Count;
+            var seen = (await _databases.Progress.GetAllAsync(ProgressScope.Dictionary)).Count;
 
             PracticeSubtitle = seen == 0
                 ? $"{total:N0} words · draws new ones each time"
                 : $"{seen:N0} of {total:N0} words started";
 
-            var learned = await _databases.Progress.CountLearnedAsync();
+            var learned = await _databases.Progress.CountLearnedAsync(ProgressScope.Dictionary);
             ShowMilestone(Milestones.Describe(learned));
         }
         catch (Exception ex)

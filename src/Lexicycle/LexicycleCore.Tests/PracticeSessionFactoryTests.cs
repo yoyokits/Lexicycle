@@ -189,29 +189,37 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_missed_word_can_come_back_after_skipping_one_session()
+    public async Task A_missed_word_is_not_in_the_very_next_session()
     {
-        // Revision is sampled rather than sorted, so a specific word returning is a
-        // likelihood, not a certainty. What is certain is that it cannot return in the
-        // very next session — and that a heavily failed word does come back eventually.
         var first = await _factory.CreateAsync(size: 10);
         var struggled = first.Set.Words[0].Source;
 
         await _factory.RecordAsync(first, PlayMissing(first, new HashSet<string> { struggled }));
 
         var second = await _factory.CreateAsync(size: 10);
+
         Assert.DoesNotContain(struggled, second.Set.Words.Select(word => word.Source));
-        await _factory.RecordAsync(second, PlayPerfectly(second));
+    }
 
-        var returned = false;
-        for (var i = 0; i < 12 && !returned; i++)
-        {
-            var session = await _factory.CreateAsync(size: 10);
-            returned = session.Set.Words.Any(word => word.Source == struggled);
-            await _factory.RecordAsync(session, PlayPerfectly(session));
-        }
+    [Fact]
+    public async Task A_miss_raises_that_word_s_revision_weight_in_the_store()
+    {
+        // Whether a sampled draw picks it is covered in SessionComposerTests over 200
+        // seeds. What matters here is the round trip: a miss played through the engine
+        // reaches SQLite as the wrong-answer count the weighting reads.
+        var first = await _factory.CreateAsync(size: 10);
+        var struggled = first.Set.Words[0].Source;
+        var struggledId = first.WordIdsBySource[struggled];
 
-        Assert.True(returned, $"'{struggled}' never came back in twelve sessions");
+        await _factory.RecordAsync(first, PlayMissing(first, new HashSet<string> { struggled }));
+
+        var seen = await _progress.GetAllAsync(ProgressScope.Dictionary);
+        var record = seen.Single(p => p.WordId == struggledId);
+
+        Assert.Equal(1, record.TimesAnsweredWrong);
+        Assert.All(
+            seen.Where(p => p.WordId != struggledId),
+            p => Assert.Equal(0, p.TimesAnsweredWrong));
     }
 
     [Fact]
@@ -266,26 +274,20 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Once_the_dictionary_is_exhausted_sessions_become_pure_revision()
+    public async Task Once_the_dictionary_is_exhausted_there_is_nothing_left_to_ask()
     {
         // 40 words, taken 20 at a time and all answered perfectly.
-        List<string> previousWords = [];
         for (var i = 0; i < 2; i++)
         {
             var session = await _factory.CreateAsync(size: 20);
             await _factory.RecordAsync(session, PlayPerfectly(session));
-            previousWords = session.Set.Words.Select(w => w.Source).ToList();
         }
 
         var next = await _factory.CreateAsync(size: 20);
 
-        // The 80% new rule cannot be met with nothing new left, so revision takes the
-        // whole session rather than leaving the learner with nothing to do.
-        Assert.False(next.IsEmpty);
-        Assert.Equal(20, next.Set.WordCount);
-
-        // And the no-repeat rule still holds against the session just played.
-        Assert.Empty(next.Set.Words.Select(w => w.Source).Intersect(previousWords));
+        // Rule 1 cannot be met with nothing new left, and padding the session out of the
+        // already-answered pool is exactly the repetition the learner objected to.
+        Assert.True(next.IsEmpty);
     }
 
     [Fact]
@@ -296,7 +298,7 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
 
         await _factory.RecordAsync(session, PlayMissing(session, new HashSet<string> { struggled }));
 
-        var progress = await _progress.GetAllAsync();
+        var progress = await _progress.GetAllAsync(ProgressScope.Dictionary);
         var record = progress.Single(p => p.WordId == session.WordIdsBySource[struggled]);
 
         Assert.Equal(1, record.TimesMissed);
@@ -310,12 +312,12 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
         var session = await _factory.CreateAsync(size: 5);
         var struggled = session.Set.Words[0].Source;
 
-        Assert.Equal(0, await _progress.CountLearnedAsync());
+        Assert.Equal(0, await _progress.CountLearnedAsync(ProgressScope.Dictionary));
 
         await _factory.RecordAsync(session, PlayMissing(session, new HashSet<string> { struggled }));
 
         // Five words were asked, but the missed one was relearned rather than known.
-        Assert.Equal(4, await _progress.CountLearnedAsync());
+        Assert.Equal(4, await _progress.CountLearnedAsync(ProgressScope.Dictionary));
     }
 
     [Fact]
@@ -328,25 +330,23 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
         await _factory.RecordAsync(first, PlayMissing(first, new HashSet<string> { struggled }));
 
         // Nine of the ten were known; the missed one does not count yet.
-        Assert.Equal(9, await _progress.CountLearnedAsync());
+        Assert.Equal(9, await _progress.CountLearnedAsync(ProgressScope.Dictionary));
 
-        // Play on until revision brings it back, then answer it cleanly.
-        for (var i = 0; i < 12; i++)
-        {
-            var session = await _factory.CreateAsync(size: 10);
-            await _factory.RecordAsync(session, PlayPerfectly(session));
+        // When it does come back and is answered cleanly, it joins the count. Recorded
+        // directly rather than by replaying sessions until the sampled draw happens to
+        // choose it — which draw it is does not change what recording does.
+        await _progress.RecordAsync(
+            ProgressScope.Dictionary,
+            sessionNumber: 3,
+            [new WordOutcome(struggledId, AnsweredCorrectly: true, Misses: 0)]);
 
-            if (session.Set.Words.Any(word => word.Source == struggled))
-            {
-                break;
-            }
-        }
+        Assert.Equal(10, await _progress.CountLearnedAsync(ProgressScope.Dictionary));
 
-        var progress = await _progress.GetAllAsync();
-        var record = progress.Single(p => p.WordId == struggledId);
+        var record = (await _progress.GetAllAsync(ProgressScope.Dictionary))
+            .Single(p => p.WordId == struggledId);
 
-        Assert.True(record.TimesCorrect > 0, $"'{struggled}' was never relearned");
-        Assert.Equal(1, record.TimesAnsweredWrong);
+        Assert.Equal(1, record.TimesCorrect);
+        Assert.Equal(1, record.TimesAnsweredWrong);   // the original miss is remembered
     }
 
     [Fact]
@@ -360,8 +360,8 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
         var second = await _factory.CreateAsync(size: 4);
         await _factory.RecordAsync(second, PlayPerfectly(second));
 
-        var learned = await _progress.CountLearnedAsync();
-        var distinct = (await _progress.GetAllAsync()).Count(p => p.TimesCorrect > 0);
+        var learned = await _progress.CountLearnedAsync(ProgressScope.Dictionary);
+        var distinct = (await _progress.GetAllAsync(ProgressScope.Dictionary)).Count(p => p.TimesCorrect > 0);
 
         Assert.Equal(distinct, learned);
     }
@@ -371,11 +371,11 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
     {
         var session = await _factory.CreateAsync(size: 5);
         await _factory.RecordAsync(session, PlayPerfectly(session));
-        Assert.Equal(5, await _progress.CountLearnedAsync());
+        Assert.Equal(5, await _progress.CountLearnedAsync(ProgressScope.Dictionary));
 
         await _progress.ResetAsync();
 
-        Assert.Equal(0, await _progress.CountLearnedAsync());
+        Assert.Equal(0, await _progress.CountLearnedAsync(ProgressScope.Dictionary));
     }
 
     [Fact]

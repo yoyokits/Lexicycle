@@ -15,8 +15,11 @@ public sealed record SessionPlan(IReadOnlyList<int> ReviewWordIds, IReadOnlyList
 ///
 /// The policy, in order of priority:
 ///
-/// 1. <b>At least 80% new.</b> Most of every session is vocabulary the learner has never
-///    been asked, taken most-common-first so useful words arrive before obscure ones.
+/// 1. <b>At least 80% new — always.</b> Most of every session is vocabulary the learner
+///    has never been asked, taken most-common-first so useful words arrive before obscure
+///    ones. This is a floor on the session <i>delivered</i>, not on the size requested:
+///    if there is not enough new material, the session shrinks, and with none at all it
+///    is empty. A pool with nothing new left is finished, not due for a replay.
 /// 2. <b>The remainder is revision, weighted towards failures.</b> A word answered wrong
 ///    often is more likely to come back than one answered wrong once.
 /// 3. <b>Weighted, not sorted.</b> Revision is drawn by weighted random sampling rather
@@ -73,21 +76,46 @@ public sealed class SessionComposer
         var newTarget = (int)Math.Ceiling(size * MinNewShare);
         var fresh = available.Take(newTarget).ToList();
 
-        // Revision fills what is left over, which grows if the dictionary runs dry.
+        // Revision is capped by how much new material there actually is, not by the size
+        // requested. Ten words asked with only four new available yields a five-word
+        // session, never ten with six repeats in it; with nothing new the plan is empty
+        // and the caller says the pool is finished rather than replaying it.
         var candidates = seen
             .Where(progress => IsAvailable(progress, sessionNumber))
             .ToList();
 
-        var review = SampleByFailure(candidates, size - fresh.Count);
+        var review = SampleByFailure(candidates, ReviewBudget(fresh.Count, size));
 
-        // If revision could not fill the gap either, take more new words rather than
-        // leaving the session short.
+        // Short of a full session, prefer more new words. They can never be a repeat, so
+        // topping up this way cannot breach rule 1.
         if (fresh.Count + review.Count < size)
         {
-            fresh = [.. available.Take(size - review.Count)];
+            fresh = available.Take(size - review.Count).ToList();
         }
 
         return new SessionPlan(review, fresh);
+    }
+
+    /// <summary>
+    /// How many revision words may accompany <paramref name="freshCount"/> new ones while
+    /// keeping new material at or above <see cref="MinNewShare"/> of the session actually
+    /// delivered.
+    ///
+    /// Solving <c>fresh / (fresh + review) >= MinNewShare</c> gives
+    /// <c>review &lt;= fresh × (1 - MinNewShare) / MinNewShare</c> — a quarter of the new
+    /// words, at 80%. Zero new words therefore allow zero revision, which is the whole
+    /// point: a pool with nothing new left is finished, not due for a replay.
+    /// </summary>
+    private static int ReviewBudget(int freshCount, int size)
+    {
+        // The tolerance is not cosmetic. In binary floating point 8 / 0.8 is
+        // 10.000000000000002 while 4 / 0.8 is 4.999999999999999, so a bare floor would
+        // allow two review words in the first case and none in the second, for what is
+        // meant to be one rule.
+        const double Tolerance = 1e-9;
+
+        var maxTotal = (int)Math.Floor(freshCount / MinNewShare + Tolerance);
+        return Math.Max(0, Math.Min(size - freshCount, maxTotal - freshCount));
     }
 
     /// <summary>

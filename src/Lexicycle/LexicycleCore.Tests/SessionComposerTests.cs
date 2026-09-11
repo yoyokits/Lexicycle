@@ -211,15 +211,34 @@ public class SessionComposerTests
     // --- running out of material -----------------------------------------------------
 
     [Fact]
-    public void Revision_fills_the_session_once_the_dictionary_runs_out()
+    public void With_no_new_words_left_the_plan_is_empty()
     {
-        // With no new words left there is no reason to leave slots unused.
+        // Rule 1 is a floor on the session delivered, so revision cannot pad a session
+        // that has no new material to be 80% of. A pool with nothing unasked is finished,
+        // not due for a replay — this is what stopped "German basics" cycling forever.
         var seen = Enumerable.Range(1, 20).Select(id => Seen(id, lastSession: 1)).ToList();
 
         var plan = _composer.Compose(sessionNumber: 10, size: 10, seen, unseenWordIds: []);
 
-        Assert.Equal(10, plan.ReviewWordIds.Count);
-        Assert.Equal(10, plan.ReviewWordIds.Distinct().Count());
+        Assert.Equal(0, plan.Count);
+    }
+
+    [Theory]
+    [InlineData(4, 5)]    // four new allows one review
+    [InlineData(3, 3)]    // three does not stretch to a fourth slot
+    [InlineData(8, 10)]
+    [InlineData(1, 1)]
+    [InlineData(0, 0)]
+    public void A_short_supply_of_new_words_shrinks_the_session(int newAvailable, int expectedTotal)
+    {
+        var seen = Enumerable.Range(100, 50).Select(id => Seen(id, lastSession: 1)).ToList();
+
+        var plan = _composer.Compose(sessionNumber: 20, size: 10, seen, Unseen(1, newAvailable));
+
+        Assert.Equal(expectedTotal, plan.Count);
+        Assert.True(
+            plan.NewWordIds.Count >= plan.Count * SessionComposer.MinNewShare,
+            $"{plan.NewWordIds.Count} new of {plan.Count} breaches the floor");
     }
 
     [Fact]
