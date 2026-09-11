@@ -49,6 +49,7 @@ Completed and verified requirements, moved here from `REQUIREMENTS.md`.
 
 ## Phase 3 — Dictionary in the app · 2026-09-11
 
+- [x] **R-301** Bundled SQLite chosen over bundled JSON: the whole dictionary is 536 KB, so size did not decide it — the session generator needs frequency-ordered queries and exclusion sets, which SQL does and a JSON blob does not.
 - [x] **R-302** `sqlite-net-pcl` in `LexicycleCore`, with `SqliteDictionaryStore` (read-only) and `SqliteProgressStore` (read-write).
 - [x] **R-303** The generated dictionary bundled as a `MauiAsset` and copied to app data on first run, versioned so a future dictionary refreshes the copy.
 - [x] **R-304** "Practice" on the home screen generates a session from the dictionary, most frequent words first.

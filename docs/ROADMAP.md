@@ -23,20 +23,27 @@ second round and ending on the summary.
 
 ## Phase 2 — Python data pipeline ✅
 
-Offline tooling under `src/python`, shipped with nothing. Turns the German Wiktionary
-parquet export into the small three-table dictionary described in `DATA-SOURCES.md`:
-`download` → `build` (with the `wordfreq` top-N cut) → `report` → `export-json`.
+Offline tooling under `src/python`, shipped with nothing. Streams the English Wiktionary
+extract and distils it into the three-table dictionary described in `DATA-SOURCES.md`:
+`download` → `build` (with `wordfreq` ranking) → `report` → `export-json`.
 
-Fixture-tested, so the transform is verifiable without the 287 MB download.
+The German edition was tried first and rejected on the data; see `DATA-SOURCES.md`.
+Fixture-tested, so the transform is verifiable without the 3.2 GB download.
 
-## Phase 3 — Dictionary in the app
+## Phase 3 — Dictionary in the app ✅ (mostly)
 
-Bring the generated dictionary into the app behind the existing repository interface.
-The bundled-SQLite vs bundled-JSON choice is made from the `report` numbers rather than
-guessed. Adds dictionary-generated sessions, reverse-direction practice, and the
-CC-BY-SA attribution screen.
+The generated dictionary ships as a bundled `MauiAsset` and "Practice" draws sessions
+from it. Per-word progress persists in a separate database, and a Leitner schedule
+counted in sessions keeps consecutive sessions from repeating words — while still
+bringing back anything missed. Sets chosen deliberately (bundled JSON, later OCR) bypass
+rotation entirely.
 
-*Requirements: R-301 … R-306.*
+Bundled SQLite won over bundled JSON on query needs, not size: the whole dictionary is
+536 KB either way, but session generation needs frequency-ordered queries with exclusion
+sets.
+
+Still open: reverse-direction practice (R-305), the attribution screen (R-306), and a
+reset-progress action (R-310).
 
 ## Phase 4 — OCR photo input
 
@@ -47,12 +54,21 @@ text is good but not perfect and a junk token would make an unanswerable questio
 
 *Requirements: R-401 … R-405.*
 
+## Data quality
+
+The generated pairs are good but not perfect — first-sense artefacts like `go → machen`,
+surviving untagged regionalisms, and phrasal verbs excluded along with phrase fragments.
+Tracked as R-308, R-509 and R-510; detailed in `DATA-SOURCES.md`.
+
 ## Phase 5 — Enrichment
 
 The word properties the dictionary already carries, plus the ones the fuller upstream
 dataset can supply: gender and part of speech shown during practice, example sentences,
-frequency-banded practice ("the 500 most common words"), further language pairs,
-user-created sets, session history and eventually spaced repetition.
+frequency-banded practice ("the 500 most common words"), further language pairs, and
+user-created sets.
+
+Session history and spaced repetition landed early, in Phase 3, because generated
+sessions needed them to avoid repeating words.
 
 The 4.45 GB `de-wiktionary-sqlite-full` dataset becomes worth revisiting here, for
 examples and IPA.

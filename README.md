@@ -11,11 +11,10 @@ so every word has been answered correctly at least once.
 
 Android, offline, no backend.
 
-- **Working now:** the trainer, running on two bundled starter sets (English–German and
-  English–Spanish), plus an offline pipeline that turns German Wiktionary into a small
-  English↔German dictionary.
-- **Next:** wiring that generated dictionary into the app, then OCR — photograph a book
-  page and practise the words on it.
+- **Working now:** the trainer, a bundled 3,545-word English–German dictionary generated
+  from Wiktionary, and generated practice sessions that remember what you have seen so
+  consecutive sessions ask different words. Fixed sets are still there for targeted drills.
+- **Next:** OCR — photograph a book page and practise the words on it.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan and
 [`REQUIREMENTS.md`](REQUIREMENTS.md) for what's outstanding.
@@ -28,9 +27,8 @@ dotnet test
 dotnet build src/Lexicycle/LexicycleApp/LexicycleApp.csproj -f net10.0-android -t:Run
 ```
 
-Requires the .NET 10 SDK with the `maui` and `android` workloads. If the JDK or Android
-SDK aren't found, copy `Directory.Build.props.user.sample` to
-`Directory.Build.props.user` and set the paths.
+Requires the .NET 10 SDK with the `maui` and `android` workloads. Full setup, emulator
+instructions and the data pipeline are in [`docs/BUILD.md`](docs/BUILD.md).
 
 ## Layout
 
