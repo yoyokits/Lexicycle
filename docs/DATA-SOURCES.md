@@ -168,24 +168,27 @@ a parameter rather than assuming German.
 
 ## Size
 
-Measured with `python -m lexicycle_data report`. The extract holds 1,492,836 rows, of
-which **3,805 English lemmas survive extraction** with at least one German translation.
+Measured with `python -m lexicycle_data report --pair en-de`. The extract holds
+1,492,836 rows, of which **3,775 English lemmas survive extraction** with at least one
+German translation.
 
 | top-N | EN words | DE words | pairs | size |
 | --- | --- | --- | --- | --- |
-| 1,000 | 1,000 | 1,538 | 1,652 | 184 KB |
-| 5,000 | 3,670 | 5,154 | 5,550 | 536 KB |
-| all | 3,670 | 5,154 | 5,550 | **536 KB** |
+| 1,000 | 1,000 | 1,537 | 1,649 | 184 KB |
+| 5,000 | 3,648 | 5,126 | 5,517 | 536 KB |
+| all | 3,648 | 5,126 | 5,517 | **536 KB** |
 
 The whole dictionary is 536 KB, so the top-N cut is moot — ship all of it. Size was never
-the binding constraint; quality was. These numbers are for **en-de**; run `report --pair
-en-es` after a fresh `download` to get the equivalent table for Spanish before deciding
-whether it needs its own top-N cut.
+the binding constraint; quality was. The **en-es** dictionary, generated the same way, is
+3,655 English words / 5,001 Spanish words / 5,367 pairs at 528 KB — run `report --pair
+en-es` for the full breakdown by top-N.
 
 Note that only ~5,100 English entries carry a translations table at all. Wiktionary
 attaches translations to a fraction of its headwords, and the extraction rules below then
-remove roughly a quarter of those. 3,670 drillable words is a solid beginner-to-
-intermediate vocabulary, not a comprehensive dictionary.
+remove roughly a quarter of those. ~3,650 drillable words is a solid beginner-to-
+intermediate vocabulary, not a comprehensive dictionary. These counts drift a little
+between runs — kaikki.org's extract is refreshed periodically, so a re-`download` is
+never byte-identical to the last one.
 
 ## Known limitations
 

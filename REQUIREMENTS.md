@@ -36,7 +36,6 @@ Known limitations of the generated dictionary, detailed in `docs/DATA-SOURCES.md
 
 - [ ] **R-501** Show grammatical gender and part of speech during practice (gender is in `words_de`, part of speech in `words_en`).
 - [ ] **R-502** Example sentences, sourced from the fuller upstream dataset, as a side table.
-- [ ] **R-504** Generate and bundle an actual `en-es` dictionary. The pipeline, `LanguagePair`, per-pair progress scoping and the home screen's language switcher are all pair-parameterised and shipped (2026-09-11) — what remains is running `download` then `build --pair en-es`, spot-checking the result (R-307), and copying `lexicycle-dict-en-es.db` into `Resources/Raw/`. `de-es` is out of scope for this item: v1 only supports pairs sourced from English (R-305 covers the reverse direction within a pair, not a third source language).
 - [ ] **R-508** German→English practice sourced from the German edition, where its English-side fragmentation does not matter.
 - [ ] **R-505** User-created and imported vocabulary sets.
 

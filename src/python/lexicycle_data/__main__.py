@@ -80,11 +80,14 @@ def command_build(args: argparse.Namespace) -> None:
         target_rank_lookup=build_rank_lookup(target),
     )
 
+    labels = {"English words": stats.english, f"{target} words": stats.target}
+    width = max(len(label) for label in (*labels, "Pairs", "Database"))
+
     print(f"Considered {stats.considered:,} upstream rows")
-    print(f"  English words  : {stats.english:,}")
-    print(f"  {target} words{' ' * max(0, 5 - len(target))}: {stats.target:,}")
-    print(f"  Pairs          : {stats.pairs:,}")
-    print(f"  Database       : {db_path}  ({_human_size(db_path.stat().st_size)})")
+    for label, count in labels.items():
+        print(f"  {label:<{width}} : {count:,}")
+    print(f"  {'Pairs':<{width}} : {stats.pairs:,}")
+    print(f"  {'Database':<{width}} : {db_path}  ({_human_size(db_path.stat().st_size)})")
 
 
 def command_report(args: argparse.Namespace) -> None:

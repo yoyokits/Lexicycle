@@ -20,7 +20,7 @@ public sealed class AppDatabases : IAsyncDisposable
     /// rather than compared by hash, which would mean reading the file on every launch.
     /// </summary>
     private const string InstalledVersionKey = "dictionary.installed_version";
-    private const int DictionaryVersion = 1;
+    private const int DictionaryVersion = 2;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, SqliteDictionaryStore> _dictionaries = [];

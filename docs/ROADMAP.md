@@ -91,13 +91,13 @@ Session history, spaced repetition and frequency-banded practice all landed earl
 Phase 3 — session generation needed the first two to avoid repeating words, and the
 bands replaced the starter sets that were too small to be useful.
 
-**Spanish is plumbed but not yet generated.** R-504 landed the pair-parameterised
-pipeline, `LanguagePair`, per-pair progress scoping, and the home screen's language
-switcher — everything needed for English-Spanish to exist alongside English-German.
-What is still missing is the data itself: `python -m lexicycle_data download` then
-`build --pair en-es` produces `lexicycle-dict-en-es.db`, which then needs bundling into
-`LexicycleApp/Resources/Raw/` and spot-checking (R-307) before it ships. Until that file
-exists, `AppDatabases` finds no asset for the pair and the switcher stays hidden — see
+**English-Spanish ships alongside English-German (R-504).** The pipeline, `LanguagePair`,
+per-pair progress scoping and the home screen's language switcher are all
+pair-parameterised; `lexicycle-dict-en-es.db` is generated, spot-checked (R-307) and
+bundled the same way as German. Verified on-device: the switcher lists both languages,
+switching recomputes the bands and Practice subtitle for the selected pair, a real
+Spanish session grades answers and shows gender hints correctly, and each pair's word
+count and milestone stay independent of the other's. `de-es` remains out of scope — see
 `docs/DATA-SOURCES.md`.
 
 The 4.45 GB `de-wiktionary-sqlite-full` dataset becomes worth revisiting here, for
