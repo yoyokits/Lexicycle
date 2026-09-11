@@ -37,9 +37,14 @@ public class ReviewScheduleTests
     // --- when a word comes back -----------------------------------------------------------
 
     [Fact]
-    public void A_word_still_being_learned_is_due_in_the_next_session()
+    public void A_word_still_being_learned_skips_one_session_before_returning()
     {
-        Assert.True(ReviewSchedule.IsDue(At(box: 0, lastSession: 4), sessionNumber: 5));
+        var learning = At(box: 0, lastSession: 4);
+
+        // Not session 5 — that is the session immediately after, and repeating a word
+        // there is what made the app feel like it was asking the same things forever.
+        Assert.False(ReviewSchedule.IsDue(learning, sessionNumber: 5));
+        Assert.True(ReviewSchedule.IsDue(learning, sessionNumber: 6));
     }
 
     [Fact]
@@ -78,7 +83,12 @@ public class ReviewScheduleTests
     {
         var relearning = At(box: ReviewSchedule.NextBox(3, answeredCorrectly: false), lastSession: 9);
 
-        Assert.True(ReviewSchedule.IsDue(relearning, sessionNumber: 10));
+        // Soon, but not immediately: the session after next.
+        Assert.False(ReviewSchedule.IsDue(relearning, sessionNumber: 10));
+        Assert.True(ReviewSchedule.IsDue(relearning, sessionNumber: 11));
+
+        // Still far sooner than the box it fell from would have waited.
+        Assert.True(ReviewSchedule.DueAtSession(relearning) < ReviewSchedule.DueAtSession(At(box: 3, lastSession: 9)));
     }
 
     [Fact]

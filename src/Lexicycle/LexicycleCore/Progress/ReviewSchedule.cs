@@ -23,6 +23,16 @@ public static class ReviewSchedule
     /// </summary>
     public static readonly IReadOnlyList<int> Delays = [5, 12, 30, 90];
 
+    /// <summary>
+    /// Sessions to wait before re-asking a word still being learned (box 0).
+    ///
+    /// Two, not one. At one, a learner who misses a few words each session was served
+    /// those same words in the very next session, over and over — the schedule kept
+    /// demoting them to box 0, and box 0 was due immediately. Waiting two sessions still
+    /// brings a missed word back quickly, but never in the session straight afterwards.
+    /// </summary>
+    public const int RelearnDelay = 2;
+
     /// <summary>A word promoted past the last box is mastered and never returns.</summary>
     public static int MasteredBox => Delays.Count + 1;
 
@@ -43,14 +53,14 @@ public static class ReviewSchedule
     }
 
     /// <summary>
-    /// Session number at which this word becomes eligible again. Box 0 words are due
-    /// immediately — they are still being learned.
+    /// Session number at which this word becomes eligible again. Box 0 words — still
+    /// being learned — come back soonest, but not in the very next session.
     /// </summary>
     public static int DueAtSession(WordProgress progress)
     {
         if (progress.Box <= 0)
         {
-            return progress.LastSession + 1;
+            return progress.LastSession + RelearnDelay;
         }
 
         if (IsMastered(progress))

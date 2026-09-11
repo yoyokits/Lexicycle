@@ -77,7 +77,7 @@ practising twice a week gets the same sequence as someone practising twice a day
 
 | Box | Meaning | Returns after |
 | --- | --- | --- |
-| 0 | being learned, or just missed | the next session |
+| 0 | being learned, or just missed | 2 sessions (`RelearnDelay`) |
 | 1-4 | answered correctly N times | 5, 12, 30, 90 sessions |
 | 5 | mastered | never |
 
@@ -85,9 +85,20 @@ A miss drops a word straight back to box 0 — it needs relearning, not a longer
 first correct interval is deliberately long: variety is the point, so a word answered
 correctly should stay away for a while.
 
-`SessionComposer` caps revision at half a session so new material keeps arriving, then
-lifts that cap once the dictionary runs out of unseen words. If nothing is new and
-nothing is due, it returns an empty plan and the UI says so rather than repeating.
+**Box 0 waits two sessions, not one.** At one, a learner missing a few words per session
+was served those same words in the very next session, every session: the schedule demoted
+them to box 0, and box 0 was due immediately. Getting one wrong effectively pinned it to
+the rotation until it was finally answered cleanly.
+
+`SessionComposer` enforces the same rule as a hard floor, independently of the delays: a
+word asked in the immediately preceding session is never offered, whatever
+`DueAtSession` says. That is the property a learner actually notices, so it does not
+depend on the delay table staying tuned — and it holds on the exhausted-dictionary path
+too, where a shorter session is preferred over one that repeats what was just asked.
+
+`SessionComposer` also caps revision at half a session so new material keeps arriving,
+then lifts that cap once the dictionary runs out of unseen words. If nothing is new and
+nothing is available, it returns an empty plan and the UI says so rather than repeating.
 
 Two database files, deliberately separate:
 

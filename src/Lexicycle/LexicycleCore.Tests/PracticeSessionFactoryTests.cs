@@ -183,17 +183,60 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_missed_word_comes_back_in_a_later_session()
+    public async Task A_missed_word_comes_back_after_skipping_one_session()
     {
         var first = await _factory.CreateAsync(size: 4);
         var struggled = first.Set.Words[0].Source;
 
         await _factory.RecordAsync(first, PlayMissing(first, new HashSet<string> { struggled }));
 
-        // A missed word drops to box 0, so it is due the very next session.
+        // Not the very next session — a word repeating immediately is what made practice
+        // feel like it was asking the same things over and over.
         var second = await _factory.CreateAsync(size: 4);
+        Assert.DoesNotContain(struggled, second.Set.Words.Select(word => word.Source));
+        await _factory.RecordAsync(second, PlayPerfectly(second));
 
-        Assert.Contains(struggled, second.Set.Words.Select(word => word.Source));
+        // But it is back the session after that, rather than being dropped.
+        var third = await _factory.CreateAsync(size: 4);
+        Assert.Contains(struggled, third.Set.Words.Select(word => word.Source));
+    }
+
+    [Fact]
+    public async Task No_word_is_ever_repeated_from_the_immediately_previous_session()
+    {
+        // The property the learner actually notices, played over a realistic run in which
+        // a third of each session is missed and so demoted for relearning.
+        var rng = new Random(7);
+        List<string>? previous = null;
+
+        for (var s = 1; s <= 8; s++)
+        {
+            var session = await _factory.CreateAsync(size: 4);
+            var words = session.Set.Words.Select(word => word.Source).ToList();
+
+            if (previous is not null)
+            {
+                Assert.Empty(words.Intersect(previous));
+            }
+
+            var engine = new SessionEngine(session.Set);
+            var missed = new HashSet<string>();
+            while (!engine.IsComplete)
+            {
+                var word = engine.CurrentWord!;
+                if (rng.NextDouble() < 0.33 && missed.Add(word.Source))
+                {
+                    engine.Submit("deliberately wrong");
+                }
+                else
+                {
+                    engine.Submit(word.PrimaryAnswer);
+                }
+            }
+
+            await _factory.RecordAsync(session, engine.BuildSummary());
+            previous = words;
+        }
     }
 
     [Fact]
@@ -264,12 +307,17 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
 
         Assert.Equal(3, await _progress.CountLearnedAsync());
 
-        // Box 0 brings it straight back; getting it right this time promotes it.
+        // The missed word sits out one session, then returns; getting it right promotes it.
         var second = await _factory.CreateAsync(size: 4);
-        Assert.Contains(struggled, second.Set.Words.Select(word => word.Source));
         await _factory.RecordAsync(second, PlayPerfectly(second));
 
-        Assert.Equal(7, await _progress.CountLearnedAsync());
+        var third = await _factory.CreateAsync(size: 4);
+        Assert.Contains(struggled, third.Set.Words.Select(word => word.Source));
+        await _factory.RecordAsync(third, PlayPerfectly(third));
+
+        // 3 from the first session, 4 from the second, then the relearned word plus the
+        // three new ones that filled the third.
+        Assert.Equal(11, await _progress.CountLearnedAsync());
     }
 
     [Fact]
