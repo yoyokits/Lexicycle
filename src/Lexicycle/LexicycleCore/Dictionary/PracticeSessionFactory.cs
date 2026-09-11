@@ -15,21 +15,42 @@ namespace LexicycleCore.Dictionary;
 /// </summary>
 public sealed class PracticeSessionFactory
 {
-    public const string GeneratedSetId = "dictionary-practice";
     public const int DefaultSize = 10;
 
+    /// <summary>Prefix of a whole-dictionary Practice session's route id, before the
+    /// pair id — <c>"practice:en-de"</c>, <c>"practice:en-es"</c>.</summary>
+    private const string GeneratedSetPrefix = "practice";
+
+    private readonly LanguagePair _pair;
     private readonly IDictionaryStore _dictionary;
     private readonly IProgressStore _progress;
     private readonly SessionComposer _composer;
 
     public PracticeSessionFactory(
+        LanguagePair pair,
         IDictionaryStore dictionary,
         IProgressStore progress,
         SessionComposer? composer = null)
     {
+        _pair = pair;
         _dictionary = dictionary;
         _progress = progress;
         _composer = composer ?? new SessionComposer();
+    }
+
+    /// <summary>The route id for practising the whole of one pair's dictionary.</summary>
+    public static string GeneratedSetIdFor(LanguagePair pair) => $"{GeneratedSetPrefix}:{pair.Id}";
+
+    /// <summary>
+    /// The pair a generated-practice route id names, or null if it names something else
+    /// (a frequency band, a bundled set) instead.
+    /// </summary>
+    public static LanguagePair? PairForGeneratedSetId(string setId)
+    {
+        var parts = setId.Split(':', 2);
+        return parts.Length == 2 && parts[0] == GeneratedSetPrefix
+            ? LanguagePair.ById(parts[1])
+            : null;
     }
 
     /// <summary>A generated session, plus the bookkeeping needed to record its results.</summary>
@@ -57,11 +78,12 @@ public sealed class PracticeSessionFactory
         FrequencyBand? band = null,
         CancellationToken cancellationToken = default)
     {
+        var scope = ProgressScope.ForDictionary(_pair.Id);
         var seen = await _progress
-            .GetAllAsync(ProgressScope.Dictionary, cancellationToken)
+            .GetAllAsync(scope, cancellationToken)
             .ConfigureAwait(false);
         var sessionNumber = await _progress
-            .BeginSessionAsync(ProgressScope.Dictionary, cancellationToken)
+            .BeginSessionAsync(scope, cancellationToken)
             .ConfigureAwait(false);
 
         // Only words never asked before are candidates for the "new" half.
@@ -83,10 +105,10 @@ public sealed class PracticeSessionFactory
             .ToList();
 
         var set = new VocabularySet(
-            band?.Id ?? GeneratedSetId,
+            band?.Id ?? GeneratedSetIdFor(_pair),
             band is null ? $"Practice · session {sessionNumber}" : band.Name,
             "en",
-            "de",
+            _pair.TargetLanguage,
             ordered.Select(word => word.ToWordPair()).ToList());
 
         // The engine works in WordPairs; this maps its summary back to dictionary ids.
@@ -118,7 +140,8 @@ public sealed class PracticeSessionFactory
         }
 
         await _progress
-            .RecordAsync(ProgressScope.Dictionary, session.SessionNumber, outcomes, cancellationToken)
+            .RecordAsync(
+                ProgressScope.ForDictionary(_pair.Id), session.SessionNumber, outcomes, cancellationToken)
             .ConfigureAwait(false);
     }
 }

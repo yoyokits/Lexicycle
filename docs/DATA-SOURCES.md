@@ -26,10 +26,15 @@ by [wiktextract](https://github.com/tatuylonen/wiktextract) and published by
 Everything needed is present and clean: whole-word translations, **gender on the
 translation itself**, and a `sense` gloss that separates meanings.
 
-The full extract is ~3.2 GB of JSONL. The `download` step streams it and writes a
-distilled, gzipped file holding only entries that have German translations and only the
-fields the pipeline uses — a small fraction of the size. Nothing large is stored, and
-extraction rules can be re-tuned offline without re-fetching.
+The full extract is ~3.2 GB of JSONL. The `download` step streams it once and writes a
+distilled, gzipped file holding only entries that have a translation into one of
+`sources.TARGET_LANGUAGES` (German and Spanish, by default) and only the fields the
+pipeline uses — a small fraction of the size. Nothing large is stored, and extraction
+rules can be re-tuned offline without re-fetching.
+
+Every configured language is captured in the same pass, so a second pair is **only** a
+`build --pair en-es` away — it never means downloading the 3.2 GB extract again. See
+"Adding a language pair" below.
 
 ## Why the German edition was rejected
 
@@ -80,7 +85,7 @@ Implemented in `src/python/lexicycle_data/model.py`, and covered by tests.
 | Rule | Reason |
 | --- | --- |
 | Keep only `lang_code == "en"` rows | Guards against a mixed dump |
-| Keep only translations whose `code`/`lang_code` is `de` | v1 is the en-de pair |
+| Keep only translations whose `code`/`lang_code` matches the pair being built | A distilled row can carry several target languages' translations together; `build --pair en-es` and `build --pair en-de` read the same file and each keeps only its own |
 | Keep only `pos` in noun / verb / adj / adv | `the → der \| die \| das` is not vocabulary worth drilling |
 | Keep only the **primary sense's** translations | "run" carries 41 German translations across dozens of senses; accepting all of them makes the question meaningless |
 | Reject multi-word English prompts | Wiktionary headwords include phrases ("as in", "what if") that are not vocabulary. Costs us genuine phrasal verbs too — see R-509 |
@@ -88,7 +93,7 @@ Implemented in `src/python/lexicycle_data/model.py`, and covered by tests.
 | Drop translations tagged obsolete, archaic, rare, dated, misspelling, nonstandard | Poor answers to require |
 | Drop translations tagged with a **regional variant** (Alemannic, Swiss, Bavarian, Palatine, Rhine-Franconian, Low German, dialectal, colloquial, slang) | Wiktionary lists dialect forms beside the standard word, so "time" otherwise collects Zeit, Zit, Ziit and zeid as equally valid |
 | Reject terms with a leading/trailing `-` or containing `...` | `"-ste"` and `"am ...-sten"` are endings, not words |
-| Order answers by **German** frequency and keep the best 4, dropping any far rarer than the best | Source order does not put the standard word first — "love" offers `Liab` before `Liebe` — so frequency, not position, picks the answer shown to the learner |
+| Order answers by **target-language** frequency and keep the best 4, dropping any far rarer than the best | Source order does not put the standard word first — "love" offers `Liab` before `Liebe` — so frequency, not position, picks the answer shown to the learner |
 | Strip a trailing `(...)` qualifier | `"Säbel (curved)"` → `"Säbel"` |
 | Reject terms containing `[ ] { } < > \| / ; … "` | Square brackets wrap glosses. Stripping them would leave a plausible-looking but wrong term |
 | Reject terms of more than three words | Those are explanations, not vocabulary. The limit still admits "sich freuen" and separable verbs |
@@ -117,20 +122,49 @@ score. Multi-word terms take the score of their rarest word, so "ice cream" rank
 
 ## Generated schema
 
+One database holds one language pair. The target-language table and its half of the join
+table are named after the language code, so `words_de`/`de_id` for German and
+`words_es`/`es_id` for Spanish — `database.schema_for(target_language)` generates it:
+
 ```sql
 CREATE TABLE words_en (id INTEGER PRIMARY KEY, text TEXT NOT NULL UNIQUE,
                        pos TEXT, freq_rank INTEGER);
-CREATE TABLE words_de (id INTEGER PRIMARY KEY, text TEXT NOT NULL UNIQUE,
-                       gender TEXT);
+CREATE TABLE words_<lang> (id INTEGER PRIMARY KEY, text TEXT NOT NULL UNIQUE,
+                           gender TEXT);
 CREATE TABLE translations (en_id INTEGER NOT NULL REFERENCES words_en(id),
-                           de_id INTEGER NOT NULL REFERENCES words_de(id),
-                           PRIMARY KEY (en_id, de_id)) WITHOUT ROWID;
+                           <lang>_id INTEGER NOT NULL REFERENCES words_<lang>(id),
+                           PRIMARY KEY (en_id, <lang>_id)) WITHOUT ROWID;
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ```
 
 `schema_version` is **2**; version 1 was the abandoned German-edition layout, which
 carried `pos` on `words_de`. Enrichment arrives as nullable columns or side tables, so no
-breaking migration is needed.
+breaking migration is needed. Adding a language is a second *database file*, never a
+wider schema — see below.
+
+## Adding a language pair
+
+The pipeline is pair-parameterised by design; English-Spanish shipping alongside
+English-German is a configuration change, not a redesign:
+
+```bash
+python -m lexicycle_data download                   # captures every TARGET_LANGUAGES code
+python -m lexicycle_data build --pair en-es --top-n 0
+cp data/dist/lexicycle-dict-en-es.db src/Lexicycle/LexicycleApp/Resources/Raw/
+```
+
+`download` only needs re-running if `sources.TARGET_LANGUAGES` gains a code that an
+existing distilled file does not carry — the default already includes `de` and `es`, so
+most of the time `build --pair en-es` alone is enough against a distilled file fetched
+for German. The app's `LanguagePair.All` (`LexicycleCore/Dictionary/LanguagePair.cs`)
+needs the new pair added to the list; `AppDatabases` then copies in whichever bundled
+`.db` files it finds and the home screen's language switcher appears automatically once
+there is more than one.
+
+A wholly new **third** language needs one addition: its code in
+`sources.TARGET_LANGUAGES`, so the next `download` captures it. Everything downstream —
+`model.py`, `database.py`, `SqliteDictionaryStore` — already takes the target language as
+a parameter rather than assuming German.
 
 ## Size
 
@@ -144,7 +178,9 @@ which **3,805 English lemmas survive extraction** with at least one German trans
 | all | 3,670 | 5,154 | 5,550 | **536 KB** |
 
 The whole dictionary is 536 KB, so the top-N cut is moot — ship all of it. Size was never
-the binding constraint; quality was.
+the binding constraint; quality was. These numbers are for **en-de**; run `report --pair
+en-es` after a fresh `download` to get the equivalent table for Spanish before deciding
+whether it needs its own top-N cut.
 
 Note that only ~5,100 English entries carry a translations table at all. Wiktionary
 attaches translations to a fraction of its headwords, and the extraction rules below then

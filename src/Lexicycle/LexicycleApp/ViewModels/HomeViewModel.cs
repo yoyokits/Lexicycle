@@ -15,6 +15,10 @@ public sealed partial class HomeViewModel : ObservableObject
     private readonly AppSettings _settings;
     private readonly AppDatabases _databases;
 
+    /// <summary>Bands already fetched for a pair, so switching back and forth does not
+    /// re-query the dictionary — band membership does not change between visits.</summary>
+    private readonly Dictionary<string, List<BandRow>> _bandCache = [];
+
     [ObservableProperty]
     private bool _isBusy;
 
@@ -38,6 +42,13 @@ public sealed partial class HomeViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasMilestone;
 
+    /// <summary>
+    /// The pair currently being practised. Null only before the first load, or when no
+    /// pair's dictionary could be opened at all.
+    /// </summary>
+    [ObservableProperty]
+    private LanguagePair? _selectedPair;
+
     public HomeViewModel(AppSettings settings, AppDatabases databases)
     {
         _settings = settings;
@@ -52,9 +63,24 @@ public sealed partial class HomeViewModel : ObservableObject
 
     public ObservableCollection<BandRow> Bands { get; } = [];
 
+    /// <summary>
+    /// Pairs whose bundled dictionary actually opened. A pair the pipeline has not been
+    /// run for yet (Spanish, until <c>build --pair en-es</c> ships a database) never
+    /// appears here rather than offering a language that immediately errors.
+    /// </summary>
+    public ObservableCollection<LanguagePair> AvailablePairs { get; } = [];
+
+    /// <summary>The switcher only earns its place on screen once there is a choice.</summary>
+    public bool HasLanguageChoice => AvailablePairs.Count > 1;
+
+    /// <summary>"en → de", shown beside Practice and every band while this pair is active.</summary>
+    public string DirectionLabel => SelectedPair?.DirectionLabel ?? string.Empty;
+
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 
     partial void OnErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasError));
+
+    partial void OnSelectedPairChanged(LanguagePair? value) => OnPropertyChanged(nameof(DirectionLabel));
 
     /// <summary>Bound to the settings switch; writes straight through to preferences.</summary>
     public bool LenientDiacritics
@@ -89,6 +115,7 @@ public sealed partial class HomeViewModel : ObservableObject
 
         try
         {
+            await DiscoverPairsAsync();
             await RefreshProgressAsync();
         }
         catch (Exception ex)
@@ -101,24 +128,68 @@ public sealed partial class HomeViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Finds which language pairs actually have a bundled dictionary, once. Cheap to
+    /// call repeatedly — after the first successful discovery every pair is already
+    /// cached by <see cref="AppDatabases"/>, so this just re-checks an in-memory list.
+    /// </summary>
+    private async Task DiscoverPairsAsync()
+    {
+        if (AvailablePairs.Count > 0)
+        {
+            return;
+        }
+
+        foreach (var pair in LanguagePair.All)
+        {
+            if (await _databases.GetDictionaryAsync(pair) is not null)
+            {
+                AvailablePairs.Add(pair);
+            }
+        }
+
+        OnPropertyChanged(nameof(HasLanguageChoice));
+
+        SelectedPair =
+            AvailablePairs.FirstOrDefault(pair => pair.Id == _settings.SelectedPairId)
+            ?? AvailablePairs.FirstOrDefault();
+    }
+
     /// <summary>Shows how far through the dictionary the learner is, and towards the
-    /// next milestone.</summary>
+    /// next milestone, for whichever pair is currently selected.</summary>
     private async Task RefreshProgressAsync()
     {
+        if (SelectedPair is not { } pair)
+        {
+            ErrorMessage = "No dictionary is bundled with this build.";
+            PracticeSubtitle = "Unavailable";
+            HasMilestone = false;
+            return;
+        }
+
         try
         {
-            var dictionary = await _databases.GetDictionaryAsync();
+            var dictionary = await _databases.GetDictionaryAsync(pair);
+            if (dictionary is null)
+            {
+                // Discovered a moment ago; should not fail here, but the option must
+                // vanish gracefully rather than crash if it somehow does.
+                ErrorMessage = $"Could not open the {pair.Name} dictionary.";
+                return;
+            }
+
+            var scope = ProgressScope.ForDictionary(pair.Id);
             var total = await dictionary.CountAsync();
-            var seen = (await _databases.Progress.GetAllAsync(ProgressScope.Dictionary)).Count;
+            var seen = (await _databases.Progress.GetAllAsync(scope)).Count;
 
             PracticeSubtitle = seen == 0
                 ? $"{total:N0} words · draws new ones each time"
                 : $"{seen:N0} of {total:N0} words started";
 
-            var learned = await _databases.Progress.CountLearnedAsync(ProgressScope.Dictionary);
+            var learned = await _databases.Progress.CountLearnedAsync(scope);
             ShowMilestone(Milestones.Describe(learned));
 
-            await RefreshBandsAsync(dictionary);
+            await RefreshBandsAsync(dictionary, pair);
         }
         catch (Exception ex)
         {
@@ -133,22 +204,29 @@ public sealed partial class HomeViewModel : ObservableObject
     /// Lists the frequency bands with how many words each holds. Sizes come from the
     /// dictionary rather than being hard-coded, so regenerating it keeps them honest.
     /// </summary>
-    private async Task RefreshBandsAsync(IDictionaryStore dictionary)
+    private async Task RefreshBandsAsync(IDictionaryStore dictionary, LanguagePair pair)
     {
-        if (Bands.Count > 0)
+        if (!_bandCache.TryGetValue(pair.Id, out var rows))
         {
-            return;
-        }
-
-        foreach (var band in FrequencyBand.All)
-        {
-            var count = await dictionary.CountInBandAsync(band);
-            if (count == 0)
+            rows = [];
+            foreach (var band in FrequencyBand.For(pair))
             {
-                continue;
+                var count = await dictionary.CountInBandAsync(band);
+                if (count == 0)
+                {
+                    continue;
+                }
+
+                rows.Add(new BandRow(band, $"{count:N0} words · {band.RangeText}"));
             }
 
-            Bands.Add(new BandRow(band, $"{count:N0} words · {band.RangeText}"));
+            _bandCache[pair.Id] = rows;
+        }
+
+        Bands.Clear();
+        foreach (var row in rows)
+        {
+            Bands.Add(row);
         }
     }
 
@@ -164,9 +242,35 @@ public sealed partial class HomeViewModel : ObservableObject
         HasMilestone = true;
     }
 
+    /// <summary>Switches the active pair and reloads everything scoped to it.</summary>
     [RelayCommand]
-    private static Task StartPracticeAsync()
-        => Shell.Current.GoToAsync($"{Routes.Session}?setId={PracticeSessionFactory.GeneratedSetId}");
+    private async Task SelectPairAsync(LanguagePair? pair)
+    {
+        if (pair is null || pair == SelectedPair || IsBusy)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        ErrorMessage = null;
+        try
+        {
+            SelectedPair = pair;
+            _settings.SelectedPairId = pair.Id;
+            await RefreshProgressAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private Task StartPracticeAsync()
+        => SelectedPair is null
+            ? Task.CompletedTask
+            : Shell.Current.GoToAsync(
+                $"{Routes.Session}?setId={Uri.EscapeDataString(PracticeSessionFactory.GeneratedSetIdFor(SelectedPair))}");
 
     [RelayCommand]
     private static Task StartBandAsync(BandRow? row)

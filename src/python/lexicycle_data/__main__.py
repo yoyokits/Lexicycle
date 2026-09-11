@@ -33,6 +33,14 @@ def _require_download() -> None:
         )
 
 
+def _target_language(pair: str) -> str:
+    """The target-language code of a ``en-<code>`` pair, or exit with a clear message."""
+    parts = pair.split("-")
+    if len(parts) != 2 or parts[0] != "en":
+        sys.exit(f"Unsupported pair {pair!r}; expected 'en-<code>', e.g. en-de or en-es.")
+    return parts[1]
+
+
 def command_download(_args: argparse.Namespace) -> None:
     paths.ensure_dirs()
     print("Streaming the English Wiktionary extract (~3.2 GB) and distilling it ...")
@@ -57,50 +65,56 @@ def command_download(_args: argparse.Namespace) -> None:
 
 def command_build(args: argparse.Namespace) -> None:
     _require_download()
+    target = _target_language(args.pair)
     db_path = paths.dictionary_db(args.pair)
 
-    print("Reading the distilled extract ...")
-    entries = rows_to_entries(sources.iter_rows())
+    print(f"Reading the distilled extract for {args.pair} ...")
+    entries = rows_to_entries(sources.iter_rows(), target)
 
     stats = build_database(
         entries,
         db_path,
+        target_language=target,
         top_n=args.top_n,
         rank_lookup=build_rank_lookup("en"),
-        german_rank_lookup=build_rank_lookup("de"),
+        target_rank_lookup=build_rank_lookup(target),
     )
 
     print(f"Considered {stats.considered:,} upstream rows")
-    print(f"  English words : {stats.english:,}")
-    print(f"  German words  : {stats.german:,}")
-    print(f"  Pairs         : {stats.pairs:,}")
-    print(f"  Database      : {db_path}  ({_human_size(db_path.stat().st_size)})")
+    print(f"  English words  : {stats.english:,}")
+    print(f"  {target} words{' ' * max(0, 5 - len(target))}: {stats.target:,}")
+    print(f"  Pairs          : {stats.pairs:,}")
+    print(f"  Database       : {db_path}  ({_human_size(db_path.stat().st_size)})")
 
 
 def command_report(args: argparse.Namespace) -> None:
     """Build at several cut-offs and print the resulting sizes side by side."""
     _require_download()
+    target = _target_language(args.pair)
     lookup = build_rank_lookup("en")
-    german_lookup = build_rank_lookup("de")
+    target_lookup = build_rank_lookup(target)
 
-    print("Reading the distilled extract once and caching entries in memory ...")
-    entries = list(rows_to_entries(sources.iter_rows()))
-    print(f"{len(entries):,} English lemmas have at least one German translation.\n")
+    print(f"Reading the distilled extract once and caching {args.pair} entries in memory ...")
+    entries = list(rows_to_entries(sources.iter_rows(), target))
+    print(f"{len(entries):,} English lemmas have at least one {target} translation.\n")
 
     scratch = paths.DIST_DIR / "_report.db"
-    header = f"{'top-N':>8}  {'EN words':>10}  {'DE words':>10}  {'pairs':>10}  {'size':>10}"
+    header = (
+        f"{'top-N':>8}  {'EN words':>10}  {target.upper() + ' words':>10}  "
+        f"{'pairs':>10}  {'size':>10}"
+    )
     print(header)
     print("-" * len(header))
 
     try:
         for size in (*REPORT_SIZES, None):
             stats = build_database(
-                entries, scratch, top_n=size,
-                rank_lookup=lookup, german_rank_lookup=german_lookup,
+                entries, scratch, target_language=target, top_n=size,
+                rank_lookup=lookup, target_rank_lookup=target_lookup,
             )
             label = f"{size:,}" if size else "all"
             print(
-                f"{label:>8}  {stats.english:>10,}  {stats.german:>10,}  "
+                f"{label:>8}  {stats.english:>10,}  {stats.target:>10,}  "
                 f"{stats.pairs:>10,}  {_human_size(scratch.stat().st_size):>10}"
             )
     finally:
@@ -108,17 +122,20 @@ def command_report(args: argparse.Namespace) -> None:
 
 
 def command_export(args: argparse.Namespace) -> None:
+    target = _target_language(args.pair)
     db_path = paths.dictionary_db(args.pair)
     if not db_path.exists():
-        sys.exit(f"{db_path} not found. Run `python -m lexicycle_data build` first.")
+        sys.exit(f"{db_path} not found. Run `python -m lexicycle_data build --pair {args.pair}` first.")
 
-    output = Path(args.output) if args.output else paths.APP_SETS_DIR / f"{args.set_id}.json"
+    resolved_set_id = args.set_id or f"en-{target}-top{args.limit}"
+    output = Path(args.output) if args.output else paths.APP_SETS_DIR / f"{resolved_set_id}.json"
     count = export_set(
         db_path,
         output,
+        target_language=target,
         limit=args.limit,
         offset=args.offset,
-        set_id=args.set_id,
+        set_id=resolved_set_id,
         name=args.name,
     )
     print(f"Wrote {count} word pairs to {output}")
@@ -137,7 +154,10 @@ def main(argv: list[str] | None = None) -> int:
     download.set_defaults(func=command_download)
 
     build = subparsers.add_parser("build", help="generate the small SQLite dictionary")
-    build.add_argument("--pair", default="en-de", help="language pair (default: en-de)")
+    build.add_argument(
+        "--pair", default="en-de",
+        help="language pair to build, e.g. en-de or en-es (default: en-de)",
+    )
     build.add_argument(
         "--top-n",
         type=int,
@@ -147,14 +167,14 @@ def main(argv: list[str] | None = None) -> int:
     build.set_defaults(func=command_build)
 
     report = subparsers.add_parser("report", help="print row counts and file size per top-N")
-    report.add_argument("--pair", default="en-de")
+    report.add_argument("--pair", default="en-de", help="language pair to report on")
     report.set_defaults(func=command_report)
 
     export = subparsers.add_parser("export-json", help="write a vocabulary set for the app")
-    export.add_argument("--pair", default="en-de")
+    export.add_argument("--pair", default="en-de", help="language pair to export from")
     export.add_argument("--limit", type=int, default=50, help="how many English words")
     export.add_argument("--offset", type=int, default=0)
-    export.add_argument("--set-id", default="en-de-top50")
+    export.add_argument("--set-id", default=None, help="defaults to en-<code>-top<limit>")
     export.add_argument("--name", default=None)
     export.add_argument("--output", default=None, help="defaults to the app's Resources/Raw/sets")
     export.set_defaults(func=command_export)

@@ -12,7 +12,7 @@ LexicycleApp  (net10.0-android, MAUI)
 LexicycleCore  (net10.0, no MAUI reference)
    Models/        WordPair, VocabularySet
    Session/       AnswerComparer, SessionEngine, SessionSummary
-   Dictionary/    IDictionaryStore, FrequencyBand, the two session factories
+   Dictionary/    IDictionaryStore, LanguagePair, FrequencyBand, the two session factories
    Progress/      IProgressStore, SessionComposer, ReviewSchedule, Milestones
    Services/      IVocabularySetRepository, IAssetProvider, bundled-JSON implementation
 ```
@@ -68,6 +68,27 @@ is independent of the article rule, which is always on.
 A `WordPair` carries a list of acceptable answers, so "Auto" and "Wagen" both pass for
 "car". The first entry is what gets shown on a miss.
 
+## Language pairs
+
+`LanguagePair` (`LexicycleCore/Dictionary/LanguagePair.cs`) names one generated
+dictionary — English to some target language. `LanguagePair.All` currently lists German
+and Spanish; a pair whose bundled `.db` file is not present in this build (Spanish, until
+the pipeline is run for it — see `docs/DATA-SOURCES.md`) is skipped at load time by
+`AppDatabases.GetDictionaryAsync`, which returns null rather than throwing, so the home
+screen simply never offers it.
+
+Each pair is completely independent: its own bundled database
+(`lexicycle-dict-<pair>.db`), its own `SqliteDictionaryStore` (parameterised by target
+language, since the target-side table and column are named after the code —
+`words_de`/`de_id`, `words_es`/`es_id`), and its own progress scope (see Scoping below).
+Learning German words is never progress towards a Spanish milestone.
+
+The home screen's language switcher only appears once more than one pair's dictionary
+actually opened (`HomeViewModel.HasLanguageChoice`); with one pair bundled — today's
+default build — the switcher is invisible and the app behaves exactly as before pairs
+existed. The chosen pair is remembered in `AppSettings.SelectedPairId` so the app reopens
+on the language last practised rather than always defaulting to German.
+
 ## Generated sessions and progress
 
 Tapping **Practice** draws its words from the bundled dictionary rather than a fixed
@@ -77,14 +98,17 @@ Two factories build sessions, and **both** consult progress:
 
 | Factory | Source | Session size |
 | --- | --- | --- |
-| `PracticeSessionFactory` | the generated dictionary, whole or one band | `DefaultSize` (10) |
+| `PracticeSessionFactory` | one pair's generated dictionary, whole or one band | `DefaultSize` (10) |
 | `FixedSetSessionFactory` | an OCR'd page (R-404) | `SizeFor(count)` |
 
 ### Bands, not starter sets
 
-The home screen offers **Practice** over the whole dictionary, plus `FrequencyBand.All`:
-Basics (the 1,000 most common), Common words (the next 1,000), Wider vocabulary (the
-rest).
+The home screen offers **Practice** over the whole of the selected pair's dictionary,
+plus that pair's `FrequencyBand.For(pair)`: Basics (the 1,000 most common), Common words
+(the next 1,000), Wider vocabulary (the rest). `FrequencyBand.All` is every pair's bands
+together, used only to resolve a route id back to a band without knowing the pair up
+front; a band's `Id` carries its pair (`"en-de:basics"`, `"en-es:basics"`) so two pairs'
+bands never collide.
 
 These replaced three hand-written JSON sets of **twelve words each**. Those were written
 in Phase 1, before the dictionary existed, and were never revisited once it did — a
@@ -105,17 +129,31 @@ sessions before it is exhausted.
 
 ### Scoping
 
-Word ids are unique only within a pool: the dictionary numbers words from `words_en`, a
-fixed set numbers its own words by position. `ProgressScope` keeps them apart —
-`"dictionary"` or `"set:<id>"` — and every progress query is scoped. All three bands share
-the `dictionary` scope, because they are slices of one pool.
+Word ids are unique only within a pool: each pair's dictionary numbers words from its own
+`words_en`, starting at 1 again for every pair, and a fixed set numbers its own words by
+position. `ProgressScope` keeps them apart:
+
+- `ProgressScope.Dictionary` (`"dictionary"`) — the **English-German** dictionary,
+  specifically. Kept as this exact bare literal rather than a pair-derived key, because
+  every installed copy's progress was already written under it before language pairs
+  existed; changing the key would silently orphan real learners' history.
+- `ProgressScope.ForDictionary(pairId)` — every other pair gets `"dictionary:<pair id>"`;
+  called with `"en-de"` it returns the legacy literal above, so callers never need to
+  special-case German.
+- `ProgressScope.ForSet(setId)` — a bundled or imported set, by its own id.
+
+All three bands of one pair share that pair's dictionary scope, because they are slices
+of one pool; Basics and Practice in German never share a scope with Basics and Practice
+in Spanish.
 
 **Session numbering is per-scope too.** A global counter would let dictionary practice
 advance a fixed set's rotation, so its no-repeat rule would be satisfied by sessions the
-learner never played there.
+learner never played there. The same reasoning keeps German and Spanish session counters
+apart.
 
-The milestone bar counts the dictionary scope only, so finishing an OCR'd page raises no
-milestone — it is not progress through the dictionary.
+The milestone bar counts the *selected pair's* dictionary scope only, so finishing an
+OCR'd page raises no milestone, and learning Spanish words does not push the German
+milestone forward or vice versa.
 
 **Word order depends on whether frequency is known.**
 
@@ -189,13 +227,14 @@ version did drive selection through fixed per-box intervals; that was removed ra
 left in place, because two scheduling models with only one of them live is a trap for the
 next reader.
 
-Two database files, deliberately separate:
+Database files, deliberately separate from each other:
 
-- `lexicycle-dict-en-de.db` — the generated dictionary, bundled as a `MauiAsset` and
-  copied to app data on first run (a `MauiAsset` cannot be opened as a file on Android).
-  Read-only.
-- `progress.db` — created on demand in app data. Keeping it apart means shipping an
-  updated dictionary never discards a learner's history.
+- `lexicycle-dict-<pair>.db` — one per language pair (`lexicycle-dict-en-de.db`,
+  `lexicycle-dict-en-es.db`, ...), bundled as a `MauiAsset` and copied to app data on
+  first run (a `MauiAsset` cannot be opened as a file on Android). Read-only.
+- `progress.db` — one file, shared by every pair via `ProgressScope`, created on demand
+  in app data. Keeping it apart from the dictionaries means shipping an updated or
+  additional dictionary never discards a learner's history.
 
 ## The repository seam
 

@@ -64,12 +64,12 @@ _MAX_WORDS = 3
 
 @dataclass(frozen=True)
 class Entry:
-    """One English lemma with the German words it translates to."""
+    """One English lemma with the target-language words it translates to."""
 
     word: str
     pos: str | None = None
-    german: tuple[tuple[str, str | None], ...] = ()
-    """Pairs of (german term, gender or None), in upstream order."""
+    translations: tuple[tuple[str, str | None], ...] = ()
+    """Pairs of (term, gender or None), in upstream order."""
 
 
 def clean_term(raw: Any) -> str | None:
@@ -151,8 +151,17 @@ def primary_sense_translations(translations: Iterable[dict[str, Any]]) -> list[d
     return [t for t in translations if t.get("sense") == first_sense]
 
 
-def extract_german(translations: Any) -> tuple[tuple[str, str | None], ...]:
-    """German terms for the primary sense, de-duplicated, order preserved."""
+def extract_translations(
+    translations: Any, language_code: str
+) -> tuple[tuple[str, str | None], ...]:
+    """Terms in ``language_code`` for the primary sense, de-duplicated, order preserved.
+
+    The primary sense is picked across every language present, then narrowed to the one
+    language asked for — a distilled row can carry German and Spanish translations
+    together, grouped by sense in upstream order, so language-filtering has to happen
+    *after* the sense is chosen or a language absent from that row's first block would
+    wrongly appear to have no primary sense at all.
+    """
     if not translations:
         return ()
 
@@ -160,6 +169,10 @@ def extract_german(translations: Any) -> tuple[tuple[str, str | None], ...]:
 
     for translation in primary_sense_translations(translations):
         if not isinstance(translation, dict):
+            continue
+
+        code = translation.get("code") or translation.get("lang_code")
+        if code and code != language_code:
             continue
 
         tags = translation.get("tags")
@@ -177,12 +190,12 @@ def extract_german(translations: Any) -> tuple[tuple[str, str | None], ...]:
             found[term] = gender
 
     # Not truncated here: the answers are ordered and capped in database.build_database,
-    # which has the German frequency lookup needed to tell Liebe from Liab.
+    # which has the target-language frequency lookup needed to tell Liebe from Liab.
     return tuple(found.items())
 
 
-def row_to_entry(row: dict[str, Any]) -> Entry | None:
-    """Convert one upstream row, or None when it yields no usable pair."""
+def row_to_entry(row: dict[str, Any], language_code: str) -> Entry | None:
+    """Convert one upstream row for one target language, or None when it yields nothing."""
     word = clean_term(row.get("word"))
     if not word or not is_drillable_prompt(word):
         return None
@@ -195,16 +208,16 @@ def row_to_entry(row: dict[str, Any]) -> Entry | None:
     if pos not in CONTENT_POS:
         return None
 
-    german = extract_german(row.get("translations"))
-    if not german:
+    translations = extract_translations(row.get("translations"), language_code)
+    if not translations:
         return None
 
-    return Entry(word=word, pos=pos, german=german)
+    return Entry(word=word, pos=pos, translations=translations)
 
 
-def rows_to_entries(rows: Iterable[dict[str, Any]]) -> Iterator[Entry]:
-    """Filter and convert a stream of upstream rows."""
+def rows_to_entries(rows: Iterable[dict[str, Any]], language_code: str) -> Iterator[Entry]:
+    """Filter and convert a stream of upstream rows for one target language."""
     for row in rows:
-        entry = row_to_entry(row)
+        entry = row_to_entry(row, language_code)
         if entry is not None:
             yield entry

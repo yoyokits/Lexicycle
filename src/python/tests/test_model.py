@@ -7,7 +7,7 @@ import pytest
 from lexicycle_data.model import (
     clean_term,
     extract_gender,
-    extract_german,
+    extract_translations,
     is_drillable_prompt,
     primary_sense_translations,
     row_to_entry,
@@ -86,40 +86,61 @@ class TestPrimarySense:
         assert primary_sense_translations([]) == []
 
 
-class TestExtractGerman:
+class TestExtractTranslations:
     def test_returns_terms_with_their_gender(self):
-        result = extract_german(
+        result = extract_translations(
             [
                 translation("Auto", "automobile", ["neuter"]),
                 translation("Wagen", "automobile", ["masculine"]),
-            ]
+            ],
+            "de",
         )
 
         assert result == (("Auto", "neuter"), ("Wagen", "masculine"))
 
     def test_deduplicates_while_preserving_order(self):
-        result = extract_german(
+        result = extract_translations(
             [
                 translation("Katze", "animal", ["feminine"]),
                 translation("Katze", "animal", ["feminine"]),
-            ]
+            ],
+            "de",
         )
 
         assert result == (("Katze", "feminine"),)
 
     def test_skips_obsolete_and_archaic_translations(self):
-        result = extract_german(
+        result = extract_translations(
             [
                 translation("Schwert", "weapon", ["neuter"]),
                 translation("Degen", "weapon", ["masculine", "obsolete"]),
-            ]
+            ],
+            "de",
         )
 
         assert result == (("Schwert", "neuter"),)
 
     def test_handles_missing_translations(self):
-        assert extract_german(None) == ()
-        assert extract_german([]) == ()
+        assert extract_translations(None, "de") == ()
+        assert extract_translations([], "de") == ()
+
+    def test_picks_out_one_language_from_a_shared_sense(self):
+        """A distilled row can carry several target languages' translations of the same
+        sense together; only the language asked for should come back."""
+        translations = [
+            translation("Liebe", "affection", ["feminine"], code="de"),
+            translation("amor", "affection", ["masculine"], code="es"),
+        ]
+
+        assert extract_translations(translations, "de") == (("Liebe", "feminine"),)
+        assert extract_translations(translations, "es") == (("amor", "masculine"),)
+
+    def test_untagged_translations_are_never_filtered_out(self):
+        """A translation with no `code` at all (older fixtures, hand-built data) is kept
+        for whatever language is asked — there is nothing to tell it apart by."""
+        result = extract_translations([{"word": "rennen", "sense": "move"}], "de")
+
+        assert result == (("rennen", None),)
 
 
 class TestRowToEntry:
@@ -130,18 +151,19 @@ class TestRowToEntry:
                 "pos": "noun",
                 "lang_code": "en",
                 "translations": [translation("Haus", "building", ["neuter"])],
-            }
+            },
+            "de",
         )
 
         assert entry is not None
         assert entry.word == "house"
         assert entry.pos == "noun"
-        assert entry.german == (("Haus", "neuter"),)
+        assert entry.translations == (("Haus", "neuter"),)
 
-    def test_drops_a_row_without_german(self):
+    def test_drops_a_row_without_a_translation_in_the_target_language(self):
         row = {"word": "nonesuch", "pos": "noun", "lang_code": "en", "translations": []}
 
-        assert row_to_entry(row) is None
+        assert row_to_entry(row, "de") is None
 
     @pytest.mark.parametrize("pos", ["article", "prep", "conj", "particle", "det"])
     def test_drops_function_words(self, pos):
@@ -153,7 +175,7 @@ class TestRowToEntry:
             "translations": [translation("der")],
         }
 
-        assert row_to_entry(row) is None
+        assert row_to_entry(row, "de") is None
 
     @pytest.mark.parametrize("pos", ["noun", "verb", "adj", "adv"])
     def test_keeps_content_words(self, pos):
@@ -164,7 +186,7 @@ class TestRowToEntry:
             "translations": [translation("Ypsilon")],
         }
 
-        assert row_to_entry(row) is not None
+        assert row_to_entry(row, "de") is not None
 
     def test_drops_a_row_from_another_language_edition(self):
         row = {
@@ -174,11 +196,22 @@ class TestRowToEntry:
             "translations": [translation("house")],
         }
 
-        assert row_to_entry(row) is None
+        assert row_to_entry(row, "de") is None
+
+    def test_a_pair_absent_from_the_row_yields_nothing(self):
+        """"love" carries German and Spanish; asking for French finds neither."""
+        row = {
+            "word": "love",
+            "pos": "noun",
+            "lang_code": "en",
+            "translations": [translation("Liebe", code="de"), translation("amor", code="es")],
+        }
+
+        assert row_to_entry(row, "fr") is None
 
 
 def test_rows_to_entries_filters_the_stream(rows):
-    entries = list(rows_to_entries(rows))
+    entries = list(rows_to_entries(rows, "de"))
     words = [entry.word for entry in entries]
 
     assert "house" in words
@@ -187,10 +220,23 @@ def test_rows_to_entries_filters_the_stream(rows):
     assert "Haus" not in words  # wrong language edition
 
     house = next(entry for entry in entries if entry.word == "house")
-    assert house.german == (("Haus", "neuter"), ("Gebäude", "neuter"))
+    assert house.translations == (("Haus", "neuter"), ("Gebäude", "neuter"))
 
     sword = next(entry for entry in entries if entry.word == "sword")
-    assert sword.german == (("Schwert", "neuter"), ("Säbel", "masculine"))
+    assert sword.translations == (("Schwert", "neuter"), ("Säbel", "masculine"))
+
+    love = next(entry for entry in entries if entry.word == "love")
+    assert love.translations == (("Liebe", "feminine"),)
+
+
+def test_rows_to_entries_builds_a_second_pair_from_the_same_stream(rows):
+    """Building en-es from the identical row stream needs no re-download and no change
+    to extraction rules — only which language `rows_to_entries` is asked for."""
+    entries = list(rows_to_entries(rows, "es"))
+    words = {entry.word: entry for entry in entries}
+
+    assert "house" not in words  # this fixture gives "house" no Spanish translation
+    assert words["love"].translations == (("amor", "masculine"),)
 
 
 class TestDrillablePrompt:
@@ -218,11 +264,12 @@ class TestDialectFiltering:
         ["Alemannic-German", "Swiss", "Bavarian", "Palatine", "Rhine-Franconian", "dialectal"],
     )
     def test_rejects_regionally_tagged_translations(self, tag):
-        result = extract_german(
+        result = extract_translations(
             [
                 translation("Zeit", "time", ["feminine"]),
                 translation("Ziit", "time", [tag, "feminine"]),
-            ]
+            ],
+            "de",
         )
 
         assert result == (("Zeit", "feminine"),)

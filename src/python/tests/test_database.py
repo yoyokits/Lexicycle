@@ -23,7 +23,9 @@ def fake_ranks():
 @pytest.fixture
 def db(tmp_path, rows, fake_ranks):
     path = tmp_path / "dict.db"
-    stats = build_database(rows_to_entries(rows), path, top_n=None, rank_lookup=fake_ranks)
+    stats = build_database(
+        rows_to_entries(rows, "de"), path, top_n=None, rank_lookup=fake_ranks
+    )
     return path, stats
 
 
@@ -137,7 +139,9 @@ class TestContent:
 class TestTopN:
     def test_keeps_only_the_most_frequent_english_words(self, tmp_path, rows, fake_ranks):
         path = tmp_path / "top2.db"
-        stats = build_database(rows_to_entries(rows), path, top_n=2, rank_lookup=fake_ranks)
+        stats = build_database(
+            rows_to_entries(rows, "de"), path, top_n=2, rank_lookup=fake_ranks
+        )
 
         english = {row["text"] for row in query(path, "SELECT text FROM words_en")}
 
@@ -146,7 +150,7 @@ class TestTopN:
 
     def test_drops_german_words_left_without_a_pair(self, tmp_path, rows, fake_ranks):
         path = tmp_path / "top2.db"
-        build_database(rows_to_entries(rows), path, top_n=2, rank_lookup=fake_ranks)
+        build_database(rows_to_entries(rows, "de"), path, top_n=2, rank_lookup=fake_ranks)
 
         german = {row["text"] for row in query(path, "SELECT text FROM words_de")}
 
@@ -163,7 +167,7 @@ class TestTopN:
 
     def test_ranks_are_written_and_unknown_ones_are_null(self, tmp_path, rows):
         path = tmp_path / "noranks.db"
-        build_database(rows_to_entries(rows), path, top_n=None)
+        build_database(rows_to_entries(rows, "de"), path, top_n=None)
 
         ranks = [row["freq_rank"] for row in query(path, "SELECT freq_rank FROM words_en")]
 
@@ -171,10 +175,41 @@ class TestTopN:
 
     def test_rebuilding_replaces_the_previous_file(self, tmp_path, rows, fake_ranks):
         path = tmp_path / "dict.db"
-        build_database(rows_to_entries(rows), path, top_n=None, rank_lookup=fake_ranks)
-        build_database(rows_to_entries(rows), path, top_n=1, rank_lookup=fake_ranks)
+        build_database(rows_to_entries(rows, "de"), path, top_n=None, rank_lookup=fake_ranks)
+        build_database(rows_to_entries(rows, "de"), path, top_n=1, rank_lookup=fake_ranks)
 
         assert len(query(path, "SELECT id FROM words_en")) == 1
+
+
+class TestSecondLanguagePair:
+    """Adding en-es is a filter change, not a schema change — proven by building both
+    pairs from the identical row stream and checking they land in separate tables."""
+
+    def test_builds_an_independent_database_for_a_second_pair(self, tmp_path, rows):
+        path = tmp_path / "dict-es.db"
+        stats = build_database(rows_to_entries(rows, "es"), path, target_language="es", top_n=None)
+
+        names = {
+            row["name"] for row in query(path, "SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert {"words_en", "words_es", "translations"} <= names
+        assert "words_de" not in names
+
+        meta = {row["key"]: row["value"] for row in query(path, "SELECT key, value FROM meta")}
+        assert meta["pair"] == "en-es"
+
+        answer = query(
+            path,
+            """
+            SELECT es.text, es.gender FROM words_en en
+            JOIN translations t ON t.en_id = en.id
+            JOIN words_es es ON es.id = t.es_id
+            WHERE en.text = 'love'
+            """,
+        )[0]
+        assert answer["text"] == "amor"
+        assert answer["gender"] == "masculine"
+        assert stats.pairs == 1
 
 
 class TestExport:
@@ -247,7 +282,7 @@ class TestAnswerOrdering:
     def _entry(self, word, german):
         from lexicycle_data.model import Entry
 
-        return Entry(word=word, pos="noun", german=tuple(german))
+        return Entry(word=word, pos="noun", translations=tuple(german))
 
     def test_the_common_word_becomes_the_primary_answer(self, tmp_path, german_ranks):
         path = tmp_path / "d.db"
@@ -255,7 +290,7 @@ class TestAnswerOrdering:
             [self._entry("love", [("Liab", None), ("Liebe", "feminine")])],
             path,
             top_n=None,
-            german_rank_lookup=german_ranks,
+            target_rank_lookup=german_ranks,
         )
 
         rows = query(
@@ -277,7 +312,7 @@ class TestAnswerOrdering:
             [self._entry("time", [("Zeit", "feminine"), ("Ziit", None), ("zeid", None)])],
             path,
             top_n=None,
-            german_rank_lookup=german_ranks,
+            target_rank_lookup=german_ranks,
         )
 
         german = {row["text"] for row in query(path, "SELECT text FROM words_de")}
@@ -291,7 +326,7 @@ class TestAnswerOrdering:
             [self._entry("car", [("Auto", "neuter"), ("Wagen", "masculine")])],
             path,
             top_n=None,
-            german_rank_lookup=lambda t: ranks.get(t, 10**9),
+            target_rank_lookup=lambda t: ranks.get(t, 10**9),
         )
 
         german = {row["text"] for row in query(path, "SELECT text FROM words_de")}
@@ -305,7 +340,7 @@ class TestAnswerOrdering:
             [self._entry("word", many)],
             path,
             top_n=None,
-            german_rank_lookup=lambda _t: 100,
+            target_rank_lookup=lambda _t: 100,
         )
 
         assert len(query(path, "SELECT id FROM words_de")) == 4

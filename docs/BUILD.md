@@ -43,10 +43,16 @@ python -m venv .venv && ./.venv/Scripts/python.exe -m pip install -e ".[dev]"
 ./.venv/Scripts/python.exe -m pytest                       # fixture-based, no download
 
 ./.venv/Scripts/python.exe -m lexicycle_data download      # streams ~3.2 GB, one time
-./.venv/Scripts/python.exe -m lexicycle_data report        # row counts + size per top-N
-./.venv/Scripts/python.exe -m lexicycle_data build --top-n 0
+./.venv/Scripts/python.exe -m lexicycle_data report         # row counts + size per top-N
+./.venv/Scripts/python.exe -m lexicycle_data build --top-n 0                # en-de
+./.venv/Scripts/python.exe -m lexicycle_data build --pair en-es --top-n 0   # a second pair
 ./.venv/Scripts/python.exe -m lexicycle_data export-json --limit 50   # inspection only
 ```
+
+`download` captures every language in `sources.TARGET_LANGUAGES` (German and Spanish, by
+default) in one pass, so building a second pair from an already-downloaded extract needs
+no re-download — only `build --pair en-<code>`. Re-run `download` only after adding a new
+code to `TARGET_LANGUAGES` itself.
 
 `export-json` no longer feeds the app — nothing ships as JSON since the starter sets were
 deleted. It stays because dumping fifty pairs and reading them is the fastest way to judge
@@ -57,16 +63,22 @@ The tests run against a small in-code fixture shaped like the real dataset, so t
 transform is verifiable without the download. If `download` fails with
 `CERTIFICATE_VERIFY_FAILED`, see the `truststore` note in `src/python/README.md`.
 
-After regenerating the dictionary, copy it into the app and bump `DictionaryVersion` in
+After regenerating a dictionary, copy it into the app and bump `DictionaryVersion` in
 `AppDatabases.cs` so installed copies refresh:
 
 ```bash
 cp data/dist/lexicycle-dict-en-de.db src/Lexicycle/LexicycleApp/Resources/Raw/
 ```
 
-Check `FrequencyBand.All` still makes sense afterwards. The bands are positional windows,
-so they resize themselves, but a much smaller dictionary could leave a band empty — the
-home screen hides any band with no words rather than showing a dead row.
+Adding a **second** pair for the first time is the same copy step, plus one line: add the
+pair to `LanguagePair.All` in `LexicycleCore/Dictionary/LanguagePair.cs`. Nothing else
+needs to change — `AppDatabases` picks up whichever `.db` files it finds bundled, and the
+home screen's language switcher appears on its own once more than one pair is present.
+See "Adding a language pair" in `docs/DATA-SOURCES.md`.
+
+Check the bands still make sense afterwards. They are positional windows, so they resize
+themselves, but a much smaller dictionary could leave one empty — the home screen hides
+any band with no words rather than showing a dead row.
 
 ## Verification traps
 

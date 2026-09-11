@@ -48,9 +48,9 @@ public sealed class FrequencyBandTests : IAsyncLifetime
             });
         }
 
-        _dictionary = new SqliteDictionaryStore(dictionaryPath);
+        _dictionary = new SqliteDictionaryStore(dictionaryPath, "de");
         _progress = new SqliteProgressStore(Path.Combine(folder, "progress.db"));
-        _factory = new PracticeSessionFactory(_dictionary, _progress);
+        _factory = new PracticeSessionFactory(LanguagePair.German, _dictionary, _progress);
 
         await Task.CompletedTask;
     }
@@ -77,11 +77,11 @@ public sealed class FrequencyBandTests : IAsyncLifetime
     {
         // The whole reason bands exist: a starter set a learner cannot exhaust in two
         // sittings. Twelve-word sets were the thing being replaced.
-        var basics = FrequencyBand.All[0];
+        var basics = FrequencyBand.For(LanguagePair.German)[0];
 
         Assert.Equal(0, basics.Skip);
         Assert.Equal(1_000, basics.Size);
-        Assert.All(FrequencyBand.All, band => Assert.True(
+        Assert.All(FrequencyBand.For(LanguagePair.German), band => Assert.True(
             band.Size is null or >= 1_000,
             $"band '{band.Name}' holds fewer than 1,000 words"));
     }
@@ -90,14 +90,14 @@ public sealed class FrequencyBandTests : IAsyncLifetime
     public void Bands_cover_the_ordering_without_gaps_or_overlaps()
     {
         var expectedSkip = 0;
-        foreach (var band in FrequencyBand.All)
+        foreach (var band in FrequencyBand.For(LanguagePair.German))
         {
             Assert.Equal(expectedSkip, band.Skip);
             expectedSkip += band.Size ?? int.MaxValue;
         }
 
         // The last band is open-ended, so nothing falls off whatever the dictionary size.
-        Assert.Null(FrequencyBand.All[^1].Size);
+        Assert.Null(FrequencyBand.For(LanguagePair.German)[^1].Size);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public sealed class FrequencyBandTests : IAsyncLifetime
         // ordinal. Slicing on its value put all 3,545 words in the last band and left
         // Basics empty on the real dictionary. Every word must land in exactly one band.
         var total = 0;
-        foreach (var band in FrequencyBand.All)
+        foreach (var band in FrequencyBand.For(LanguagePair.German))
         {
             total += await _dictionary.CountInBandAsync(band);
         }
@@ -116,7 +116,7 @@ public sealed class FrequencyBandTests : IAsyncLifetime
 
         // No word is in two bands, and none is missed.
         var everySeen = new HashSet<int>();
-        foreach (var band in FrequencyBand.All)
+        foreach (var band in FrequencyBand.For(LanguagePair.German))
         {
             var ids = await _dictionary.GetUnseenIdsAsync([], limit: Words, band);
             foreach (var id in ids)
@@ -131,15 +131,15 @@ public sealed class FrequencyBandTests : IAsyncLifetime
     [Fact]
     public async Task A_band_counts_only_its_own_slice()
     {
-        Assert.Equal(1_000, await _dictionary.CountInBandAsync(FrequencyBand.All[0]));
-        Assert.Equal(1_000, await _dictionary.CountInBandAsync(FrequencyBand.All[1]));
-        Assert.Equal(500, await _dictionary.CountInBandAsync(FrequencyBand.All[2]));
+        Assert.Equal(1_000, await _dictionary.CountInBandAsync(FrequencyBand.For(LanguagePair.German)[0]));
+        Assert.Equal(1_000, await _dictionary.CountInBandAsync(FrequencyBand.For(LanguagePair.German)[1]));
+        Assert.Equal(500, await _dictionary.CountInBandAsync(FrequencyBand.For(LanguagePair.German)[2]));
     }
 
     [Fact]
     public async Task A_band_session_only_draws_from_inside_the_band()
     {
-        var second = FrequencyBand.All[1];   // ranks 1001-2000
+        var second = FrequencyBand.For(LanguagePair.German)[1];   // ranks 1001-2000
 
         var session = await _factory.CreateAsync(size: 10, band: second);
 
@@ -152,7 +152,7 @@ public sealed class FrequencyBandTests : IAsyncLifetime
     [Fact]
     public async Task A_band_starts_at_its_most_common_word()
     {
-        var session = await _factory.CreateAsync(size: 3, band: FrequencyBand.All[1]);
+        var session = await _factory.CreateAsync(size: 3, band: FrequencyBand.For(LanguagePair.German)[1]);
 
         Assert.Equal(["w01001", "w01002", "w01003"], session.Set.Words.Select(w => w.Source));
     }
@@ -163,7 +163,7 @@ public sealed class FrequencyBandTests : IAsyncLifetime
         // Bands are views over one body of vocabulary, not separate courses. A word
         // learned in Basics must never be offered again as *new* under Practice. It may
         // still come back as revision, which is a different thing and the point of rule 2.
-        var basics = await _factory.CreateAsync(size: 10, band: FrequencyBand.All[0]);
+        var basics = await _factory.CreateAsync(size: 10, band: FrequencyBand.For(LanguagePair.German)[0]);
         var learnedIds = basics.WordIdsBySource.Values.ToHashSet();
         await _factory.RecordAsync(basics, PlayPerfectly(basics));
 
@@ -186,7 +186,7 @@ public sealed class FrequencyBandTests : IAsyncLifetime
     public async Task An_exhausted_band_yields_an_empty_session()
     {
         // Work through the whole first band, then ask for one more.
-        var band = new FrequencyBand("tiny", "Tiny", Skip: 0, Size: 20);
+        var band = new FrequencyBand("tiny", "Tiny", Skip: 0, Size: 20, PairId: LanguagePair.German.Id);
 
         for (var i = 0; i < 2; i++)
         {
@@ -202,8 +202,8 @@ public sealed class FrequencyBandTests : IAsyncLifetime
     [Fact]
     public async Task Finishing_one_band_leaves_the_next_untouched()
     {
-        var first = new FrequencyBand("a", "A", Skip: 0, Size: 10);    // words 1-10
-        var second = new FrequencyBand("b", "B", Skip: 10, Size: 10);  // words 11-20
+        var first = new FrequencyBand("a", "A", Skip: 0, Size: 10, PairId: LanguagePair.German.Id);    // words 1-10
+        var second = new FrequencyBand("b", "B", Skip: 10, Size: 10, PairId: LanguagePair.German.Id);  // words 11-20
 
         var session = await _factory.CreateAsync(size: 10, band: first);
         await _factory.RecordAsync(session, PlayPerfectly(session));
@@ -215,13 +215,26 @@ public sealed class FrequencyBandTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("band-1", "Basics")]
-    [InlineData("band-2", "Common words")]
-    [InlineData("band-3", "Wider vocabulary")]
+    [InlineData("en-de:basics", "Basics")]
+    [InlineData("en-de:common", "Common words")]
+    [InlineData("en-de:wider", "Wider vocabulary")]
+    [InlineData("en-es:basics", "Basics")]
     public void Bands_resolve_by_id(string id, string expectedName)
         => Assert.Equal(expectedName, FrequencyBand.ById(id)?.Name);
 
     [Fact]
     public void An_unknown_id_resolves_to_nothing()
-        => Assert.Null(FrequencyBand.ById("en-de-basics"));
+        => Assert.Null(FrequencyBand.ById("band-1"));
+
+    [Fact]
+    public void Every_pair_gets_its_own_bands_with_globally_unique_ids()
+    {
+        // Two pairs sharing a bare band id ("basics") would let a route parameter for
+        // one language's band resolve to the other's — the id has to carry the pair too.
+        var ids = FrequencyBand.All.Select(band => band.Id).ToList();
+
+        Assert.Equal(ids.Count, ids.Distinct().Count());
+        Assert.Equal(LanguagePair.All.Count * 3, ids.Count);
+        Assert.All(FrequencyBand.All, band => Assert.NotNull(LanguagePair.ById(band.PairId)));
+    }
 }

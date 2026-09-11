@@ -24,6 +24,7 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     /// <summary>Set only for dictionary-backed Practice sessions.</summary>
     private PracticeSessionFactory.PracticeSession? _practice;
     private PracticeSessionFactory? _factory;
+    private LanguagePair? _pair;
 
     /// <summary>Set only for fixed sets — the bundled JSON, and later an OCR'd page.</summary>
     private FixedSetSessionFactory.FixedSetSession? _fixedSet;
@@ -163,12 +164,15 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
         _fixedSet = null;
 
         var band = FrequencyBand.ById(setId);
-        var isGenerated = setId == PracticeSessionFactory.GeneratedSetId || band is not null;
+        _pair = band is not null
+            ? LanguagePair.ById(band.PairId)
+            : PracticeSessionFactory.PairForGeneratedSetId(setId);
+        var isGenerated = _pair is not null;
 
         try
         {
             var set = isGenerated
-                ? await StartGeneratedSessionAsync(band)
+                ? await StartGeneratedSessionAsync(_pair!, band)
                 : await StartFixedSetSessionAsync(setId);
 
             if (set is null)
@@ -226,11 +230,12 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     /// Draws the next batch of words from the dictionary, skipping anything practised
     /// recently so consecutive sessions differ.
     /// </summary>
-    private async Task<VocabularySet> StartGeneratedSessionAsync(FrequencyBand? band)
+    private async Task<VocabularySet> StartGeneratedSessionAsync(LanguagePair pair, FrequencyBand? band)
     {
-        _factory = new PracticeSessionFactory(
-            await _databases.GetDictionaryAsync(),
-            _databases.Progress);
+        var dictionary = await _databases.GetDictionaryAsync(pair)
+            ?? throw new InvalidOperationException($"No dictionary bundled for {pair.Id}.");
+
+        _factory = new PracticeSessionFactory(pair, dictionary, _databases.Progress);
 
         _practice = await _factory.CreateAsync(band: band);
         return _practice.Set;
@@ -344,18 +349,19 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
                 return null;
             }
 
-            if (_practice is null || _factory is null)
+            if (_practice is null || _factory is null || _pair is null)
             {
                 return null;
             }
 
             var progress = _databases.Progress;
+            var scope = ProgressScope.ForDictionary(_pair.Id);
 
             // Measured either side of the write, so the comparison covers exactly this
             // session and a milestone can only ever be celebrated once.
-            var before = await progress.CountLearnedAsync(ProgressScope.Dictionary);
+            var before = await progress.CountLearnedAsync(scope);
             await _factory.RecordAsync(_practice, summary);
-            var after = await progress.CountLearnedAsync(ProgressScope.Dictionary);
+            var after = await progress.CountLearnedAsync(scope);
 
             return Milestones.Crossed(before, after);
         }

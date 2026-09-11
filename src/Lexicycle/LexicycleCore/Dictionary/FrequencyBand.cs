@@ -1,7 +1,8 @@
 namespace LexicycleCore.Dictionary;
 
 /// <summary>
-/// A slice of the dictionary by commonness — "the 1,000 most common words", and so on.
+/// A slice of one language pair's dictionary by commonness — "the 1,000 most common
+/// words", and so on.
 ///
 /// These replaced the hand-written starter sets that shipped in Phase 1. Those held
 /// twelve words each, which was enough to demonstrate the trainer before the dictionary
@@ -16,23 +17,35 @@ namespace LexicycleCore.Dictionary;
 /// Windows also survive regeneration: whatever the dictionary grows to, "the first 1,000"
 /// still means the first 1,000.
 /// </summary>
+/// <param name="Id">Globally unique across every pair — <c>"{pair.Id}:{suffix}"</c> —
+/// so it can be resolved back to both the band and the pair from a bare route parameter.</param>
 /// <param name="Skip">How many more common words come before this band.</param>
 /// <param name="Size">How many words the band holds. Null means "everything after Skip".</param>
-public sealed record FrequencyBand(string Id, string Name, int Skip, int? Size)
+/// <param name="PairId">The <see cref="LanguagePair"/> this band slices.</param>
+public sealed record FrequencyBand(string Id, string Name, int Skip, int? Size, string PairId)
 {
     /// <summary>
-    /// The bands offered on the home screen, in the order a learner should meet them.
-    ///
-    /// A thousand words is a real milestone — roughly the point at which ordinary
-    /// conversation becomes followable — so the first band is sized to be worth finishing
-    /// rather than sized to be quick.
+    /// The window shape shared by every language pair, in the order a learner should
+    /// meet them. A thousand words is a real milestone — roughly the point at which
+    /// ordinary conversation becomes followable — so the first band is sized to be worth
+    /// finishing rather than sized to be quick.
     /// </summary>
-    public static IReadOnlyList<FrequencyBand> All { get; } =
+    private static readonly (string Suffix, string Name, int Skip, int? Size)[] Windows =
     [
-        new("band-1", "Basics", 0, 1_000),
-        new("band-2", "Common words", 1_000, 1_000),
-        new("band-3", "Wider vocabulary", 2_000, null),
+        ("basics", "Basics", 0, 1_000),
+        ("common", "Common words", 1_000, 1_000),
+        ("wider", "Wider vocabulary", 2_000, null),
     ];
+
+    /// <summary>The bands for one language pair, offered on the home screen.</summary>
+    public static IReadOnlyList<FrequencyBand> For(LanguagePair pair)
+        => Windows
+            .Select(w => new FrequencyBand($"{pair.Id}:{w.Suffix}", w.Name, w.Skip, w.Size, pair.Id))
+            .ToList();
+
+    /// <summary>Every band of every known pair, for route resolution.</summary>
+    public static IReadOnlyList<FrequencyBand> All { get; } =
+        LanguagePair.All.SelectMany(For).ToList();
 
     public static FrequencyBand? ById(string id)
         => All.FirstOrDefault(band => band.Id == id);

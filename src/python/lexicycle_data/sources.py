@@ -1,18 +1,21 @@
 """Reading upstream Wiktionary data.
 
 The input is the **English** Wiktionary edition, as extracted by wiktextract and
-published by kaikki.org. English lemmas are the headwords and German words are the
-translations, which is the direction Lexicycle asks questions in.
+published by kaikki.org. English lemmas are the headwords and the translations are the
+answers, which is the direction Lexicycle asks questions in.
 
 The German edition was tried first and abandoned: wiktextract shatters multi-word
 English translations there into separate word-level entries ("piece of furniture"
 becomes "item", "piece", "of", "furniture"), and the fragments are indistinguishable
 from genuine one-word translations. See docs/DATA-SOURCES.md.
 
-The full extract is ~3.2 GB of JSONL. `download` streams it and writes a distilled file
-holding only entries that have German translations, and only the fields the pipeline
-uses — a couple of percent of the size. Extraction rules can then be re-tuned offline
-without fetching 3.2 GB again.
+The full extract is ~3.2 GB of JSONL. `download` streams it once and writes a distilled
+file holding only entries that have a translation into one of `TARGET_LANGUAGES`, and
+only the fields the pipeline uses — a couple of percent of the size. Every configured
+language is captured in the same pass so adding a pair later (`build --pair en-es`)
+never means downloading the extract again — only the language list here needs a new
+entry, then a fresh `download`. Extraction rules can be re-tuned offline from the
+distilled file without ever refetching the 3.2 GB.
 """
 
 from __future__ import annotations
@@ -20,20 +23,23 @@ from __future__ import annotations
 import gzip
 import json
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 from .paths import RAW_DIR
 
 DATASET_URL = "https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl"
 
 #: Distilled output of the download step. Gzipped JSONL, a few tens of MB.
-DISTILLED_NAME = "en-wiktionary-de-translations.jsonl.gz"
+DISTILLED_NAME = "en-wiktionary-translations.jsonl.gz"
 
 #: Fields kept when distilling. Everything else (etymology, sounds, forms, derived,
 #: descendants, categories, wikipedia links) is dropped on the way past.
 KEPT_FIELDS = ("word", "pos", "lang_code")
 
-TARGET_LANGUAGE = "de"
+#: Languages distilled by default. Add a code here (and only here) to bring a new
+#: language pair's translations along on the next `download` — `build --pair en-<code>`
+#: does the rest.
+TARGET_LANGUAGES = ("de", "es")
 
 USER_AGENT = "lexicycle-data/0.1 (+https://github.com/yoyokits/Lexicycle)"
 
@@ -62,33 +68,44 @@ def use_os_certificate_store() -> bool:
     return True
 
 
-def german_translations(row: dict[str, Any]) -> list[dict[str, Any]]:
-    """The German entries of a row's translation list."""
+def target_translations(
+    row: dict[str, Any], language_codes: Iterable[str]
+) -> list[dict[str, Any]]:
+    """The entries of a row's translation list matching any of ``language_codes``."""
     translations = row.get("translations") or []
+    codes = set(language_codes)
 
     return [
         translation
         for translation in translations
         if isinstance(translation, dict)
-        and TARGET_LANGUAGE in (translation.get("code"), translation.get("lang_code"))
+        and (translation.get("code") or translation.get("lang_code")) in codes
     ]
 
 
-def distill_row(row: dict[str, Any]) -> dict[str, Any] | None:
+def distill_row(
+    row: dict[str, Any], language_codes: Iterable[str] = TARGET_LANGUAGES
+) -> dict[str, Any] | None:
     """Reduce one upstream row to the fields the pipeline needs, or drop it."""
     if row.get("lang_code") != "en":
         return None
 
-    translations = german_translations(row)
+    translations = target_translations(row, language_codes)
     if not translations:
         return None
 
     distilled: dict[str, Any] = {field: row.get(field) for field in KEPT_FIELDS}
     distilled["translations"] = [
         {
-            key: translation.get(key)
-            for key in ("word", "sense", "tags", "english", "roman")
-            if translation.get(key)
+            **{
+                key: translation.get(key)
+                for key in ("word", "sense", "tags", "english", "roman")
+                if translation.get(key)
+            },
+            # Kept explicitly: a distilled row can hold more than one target language's
+            # translations mixed together, so downstream extraction needs to know which
+            # is which. `code` is wiktextract's own field name for this.
+            "code": translation.get("code") or translation.get("lang_code"),
         }
         for translation in translations
     ]
@@ -118,6 +135,7 @@ def download(
     url: str = DATASET_URL,
     destination: Path | None = None,
     max_attempts: int = 6,
+    language_codes: Iterable[str] = TARGET_LANGUAGES,
 ) -> Path:
     """Stream the extract and write the distilled file. ~3.2 GB transferred, once.
 
@@ -143,6 +161,7 @@ def download(
 
     offset = read = kept = 0
     remainder = b""
+    language_codes = tuple(language_codes)
 
     with gzip.open(destination, "wt", encoding="utf-8") as out:
         for attempt in range(1, max_attempts + 1):
@@ -172,7 +191,7 @@ def download(
                             if row is None:
                                 continue
 
-                            distilled = distill_row(row)
+                            distilled = distill_row(row, language_codes)
                             if distilled is None:
                                 continue
 
@@ -206,7 +225,7 @@ def download(
         if remainder.strip():
             read += 1
             row = _parse(remainder)
-            if row is not None and (distilled := distill_row(row)) is not None:
+            if row is not None and (distilled := distill_row(row, language_codes)) is not None:
                 out.write(json.dumps(distilled, ensure_ascii=False) + "\n")
                 kept += 1
 
@@ -214,7 +233,8 @@ def download(
         destination.unlink(missing_ok=True)
         raise TruncatedDownload(f"Only {offset:,} of {total:,} bytes arrived.")
 
-    print(f"  {read:,} rows read, {kept:,} kept with German translations")
+    languages = ", ".join(language_codes)
+    print(f"  {read:,} rows read, {kept:,} kept with a translation into {languages}")
     return destination
 
 

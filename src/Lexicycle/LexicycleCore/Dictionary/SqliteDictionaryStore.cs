@@ -3,26 +3,50 @@ using SQLite;
 namespace LexicycleCore.Dictionary;
 
 /// <summary>
-/// Reads the generated dictionary. The file is produced by <c>src/python</c> and shipped
-/// read-only, so this opens it without ever creating tables.
+/// Reads one language pair's generated dictionary. The file is produced by
+/// <c>src/python</c> and shipped read-only, so this opens it without ever creating
+/// tables.
+///
+/// Every pair's database shares the <c>words_en</c> table shape, but the target side is
+/// named after the language (<c>words_de</c>/<c>de_id</c>, <c>words_es</c>/<c>es_id</c>),
+/// so the target language has to be known at construction time to build the right SQL.
+/// The language code comes from <see cref="LanguagePair"/>, never from user input, so
+/// interpolating it into table and column names is as safe as the band offsets below.
 /// </summary>
 public sealed class SqliteDictionaryStore : IDictionaryStore, IAsyncDisposable
 {
-    /// <summary>Article shown in a hint, per gender. Never includes the answer itself.</summary>
-    private static readonly Dictionary<string, string> Articles = new(StringComparer.OrdinalIgnoreCase)
+    /// <summary>Article shown in a hint, per gender, by target language. Spanish has no
+    /// neuter for common nouns. Never includes the answer itself.</summary>
+    private static readonly Dictionary<string, Dictionary<string, string>> ArticlesByLanguage = new()
     {
-        ["masculine"] = "der",
-        ["feminine"] = "die",
-        ["neuter"] = "das",
+        ["de"] = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["masculine"] = "der",
+            ["feminine"] = "die",
+            ["neuter"] = "das",
+        },
+        ["es"] = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["masculine"] = "el",
+            ["feminine"] = "la",
+        },
     };
 
     private readonly SQLiteAsyncConnection _connection;
+    private readonly string _targetTable;
+    private readonly string _targetIdColumn;
+    private readonly Dictionary<string, string> _articles;
 
-    public SqliteDictionaryStore(string databasePath)
+    public SqliteDictionaryStore(string databasePath, string targetLanguage)
     {
         _connection = new SQLiteAsyncConnection(
             databasePath,
             SQLiteOpenFlags.ReadOnly | SQLiteOpenFlags.FullMutex);
+        _targetTable = $"words_{targetLanguage}";
+        _targetIdColumn = $"{targetLanguage}_id";
+        _articles = ArticlesByLanguage.TryGetValue(targetLanguage, out var articles)
+            ? articles
+            : [];
     }
 
     private sealed class IdRow
@@ -116,13 +140,13 @@ public sealed class SqliteDictionaryStore : IDictionaryStore, IAsyncDisposable
         // One row per acceptable answer; grouped back into words below.
         var rows = await _connection.QueryAsync<PairRow>(
             $"""
-             SELECT en.id AS Id, en.text AS Source, de.text AS Answer, de.gender AS Gender,
+             SELECT en.id AS Id, en.text AS Source, tw.text AS Answer, tw.gender AS Gender,
                     en.freq_rank AS FreqRank
              FROM words_en en
              JOIN translations t ON t.en_id = en.id
-             JOIN words_de de ON de.id = t.de_id
+             JOIN {_targetTable} tw ON tw.id = t.{_targetIdColumn}
              WHERE en.id IN ({string.Join(",", ids)})
-             ORDER BY en.id, de.id
+             ORDER BY en.id, tw.id
              """).ConfigureAwait(false);
 
         var byId = rows
@@ -133,7 +157,7 @@ public sealed class SqliteDictionaryStore : IDictionaryStore, IAsyncDisposable
         return ids.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
     }
 
-    private static DictionaryWord BuildWord(IGrouping<int, PairRow> group)
+    private DictionaryWord BuildWord(IGrouping<int, PairRow> group)
     {
         var answers = group.Select(row => row.Answer).ToList();
         var first = group.First();
@@ -146,8 +170,8 @@ public sealed class SqliteDictionaryStore : IDictionaryStore, IAsyncDisposable
     /// A gender hint that gives the article but never the word — "das … (neuter)".
     /// Spelling out "das Haus" under the prompt "house" would hand over the answer.
     /// </summary>
-    private static string? BuildHint(string? gender)
-        => gender is not null && Articles.TryGetValue(gender, out var article)
+    private string? BuildHint(string? gender)
+        => gender is not null && _articles.TryGetValue(gender, out var article)
             ? $"{article} … ({gender})"
             : null;
 

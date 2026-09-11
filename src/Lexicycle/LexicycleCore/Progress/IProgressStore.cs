@@ -12,8 +12,20 @@ public sealed record WordOutcome(int WordId, bool AnsweredCorrectly, int Misses)
 /// </summary>
 public static class ProgressScope
 {
-    /// <summary>The generated dictionary behind the Practice session.</summary>
+    /// <summary>
+    /// The generated English-German dictionary behind the original Practice session.
+    /// Kept as a bare literal — not <c>ForDictionary("en-de")</c> — because every
+    /// installed copy's existing progress was written under this exact key before
+    /// language pairs existed; changing it would silently orphan real learners' history.
+    /// </summary>
     public const string Dictionary = "dictionary";
+
+    /// <summary>
+    /// The generated dictionary for one language pair. English-German keeps the legacy
+    /// unscoped key so existing progress is not orphaned; every other pair gets its own.
+    /// </summary>
+    public static string ForDictionary(string pairId)
+        => pairId == "en-de" ? Dictionary : $"dictionary:{pairId}";
 
     /// <summary>A bundled or imported set is scoped by its own id.</summary>
     public static string ForSet(string setId) => $"set:{setId}";

@@ -18,6 +18,10 @@ Android, offline, no backend.
   what you get wrong.
 - **Pick your level:** Basics (the 1,000 most common words), Common words (the next
   1,000), or Wider vocabulary — or Practice straight through the whole dictionary.
+- **More than one language:** the dictionary, progress tracking, and every screen are
+  built around language pairs rather than English-German specifically, so a bundled
+  English-Spanish dictionary appears as a second option on the home screen with no other
+  change. English-Spanish itself has not been generated yet — see `docs/DATA-SOURCES.md`.
 - **Next:** OCR — photograph a book page and practise the words on it.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan and

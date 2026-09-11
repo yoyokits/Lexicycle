@@ -59,6 +59,10 @@ the next rung — 10, 50, 100, 500, 1000, then every further thousand — and pa
 congratulated on the summary screen. The rungs are close together early, where a beginner
 needs to see movement, and widen once progress is steady.
 
+The dictionary, bands, and progress scoping are all pair-parameterised
+(`LanguagePair`) rather than English-German-specific, so a second pair is bundling a
+second `.db` file, not new code — see `docs/DATA-SOURCES.md` and R-504.
+
 Still open: reverse-direction practice (R-305), the attribution screen (R-306), and a
 global reset (R-323 — per-set restart landed with R-310).
 
@@ -87,10 +91,14 @@ Session history, spaced repetition and frequency-banded practice all landed earl
 Phase 3 — session generation needed the first two to avoid repeating words, and the
 bands replaced the starter sets that were too small to be useful.
 
-**There is no Spanish content.** `en-es-basics.json` went with the other starter sets, and
-the dictionary is English→German only. Restoring it means R-504 rather than a new JSON
-file: the English Wiktionary carries translations for every language, so another pair is a
-filter change in the pipeline.
+**Spanish is plumbed but not yet generated.** R-504 landed the pair-parameterised
+pipeline, `LanguagePair`, per-pair progress scoping, and the home screen's language
+switcher — everything needed for English-Spanish to exist alongside English-German.
+What is still missing is the data itself: `python -m lexicycle_data download` then
+`build --pair en-es` produces `lexicycle-dict-en-es.db`, which then needs bundling into
+`LexicycleApp/Resources/Raw/` and spot-checking (R-307) before it ships. Until that file
+exists, `AppDatabases` finds no asset for the pair and the switcher stays hidden — see
+`docs/DATA-SOURCES.md`.
 
 The 4.45 GB `de-wiktionary-sqlite-full` dataset becomes worth revisiting here, for
 examples and IPA.
