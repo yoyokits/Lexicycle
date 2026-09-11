@@ -242,6 +242,66 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Only_words_answered_correctly_count_towards_a_milestone()
+    {
+        var session = await _factory.CreateAsync(size: 5);
+        var struggled = session.Set.Words[0].Source;
+
+        Assert.Equal(0, await _progress.CountLearnedAsync());
+
+        await _factory.RecordAsync(session, PlayMissing(session, new HashSet<string> { struggled }));
+
+        // Five words were asked, but the missed one was relearned rather than known.
+        Assert.Equal(4, await _progress.CountLearnedAsync());
+    }
+
+    [Fact]
+    public async Task Relearning_a_missed_word_later_adds_it_to_the_count()
+    {
+        var first = await _factory.CreateAsync(size: 4);
+        var struggled = first.Set.Words[0].Source;
+        await _factory.RecordAsync(first, PlayMissing(first, new HashSet<string> { struggled }));
+
+        Assert.Equal(3, await _progress.CountLearnedAsync());
+
+        // Box 0 brings it straight back; getting it right this time promotes it.
+        var second = await _factory.CreateAsync(size: 4);
+        Assert.Contains(struggled, second.Set.Words.Select(word => word.Source));
+        await _factory.RecordAsync(second, PlayPerfectly(second));
+
+        Assert.Equal(7, await _progress.CountLearnedAsync());
+    }
+
+    [Fact]
+    public async Task The_learned_count_does_not_double_count_a_repeated_word()
+    {
+        var first = await _factory.CreateAsync(size: 4);
+        var struggled = first.Set.Words[0].Source;
+
+        // Miss it, then get it right twice over the next two sessions.
+        await _factory.RecordAsync(first, PlayMissing(first, new HashSet<string> { struggled }));
+        var second = await _factory.CreateAsync(size: 4);
+        await _factory.RecordAsync(second, PlayPerfectly(second));
+
+        var learned = await _progress.CountLearnedAsync();
+        var distinct = (await _progress.GetAllAsync()).Count(p => p.TimesCorrect > 0);
+
+        Assert.Equal(distinct, learned);
+    }
+
+    [Fact]
+    public async Task Resetting_progress_clears_the_learned_count()
+    {
+        var session = await _factory.CreateAsync(size: 5);
+        await _factory.RecordAsync(session, PlayPerfectly(session));
+        Assert.Equal(5, await _progress.CountLearnedAsync());
+
+        await _progress.ResetAsync();
+
+        Assert.Equal(0, await _progress.CountLearnedAsync());
+    }
+
+    [Fact]
     public async Task Resetting_progress_starts_the_rotation_over()
     {
         var first = await _factory.CreateAsync(size: 5);

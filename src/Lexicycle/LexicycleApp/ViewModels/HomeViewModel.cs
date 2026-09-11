@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using LexicycleApp.Services;
 using LexicycleCore.Dictionary;
 using LexicycleCore.Models;
+using LexicycleCore.Progress;
 using LexicycleCore.Services;
 
 namespace LexicycleApp.ViewModels;
@@ -23,6 +24,20 @@ public sealed partial class HomeViewModel : ObservableObject
 
     [ObservableProperty]
     private string _practiceSubtitle = "Draws new words each time";
+
+    [ObservableProperty]
+    private string _milestoneHeadline = string.Empty;
+
+    [ObservableProperty]
+    private string _milestoneCaption = string.Empty;
+
+    [ObservableProperty]
+    private double _milestoneFraction;
+
+    /// <summary>Hidden until progress can actually be read, so a failure shows nothing
+    /// rather than a misleading empty bar.</summary>
+    [ObservableProperty]
+    private bool _hasMilestone;
 
     public HomeViewModel(
         IVocabularySetRepository repository,
@@ -56,10 +71,14 @@ public sealed partial class HomeViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Runs on every visit, not just the first. The sets themselves are fixed, but the
+    /// learner has usually just finished a session, so the milestone bar has to be re-read.
+    /// </summary>
     [RelayCommand]
     private async Task LoadAsync()
     {
-        if (IsBusy || Sets.Count > 0)
+        if (IsBusy)
         {
             return;
         }
@@ -69,15 +88,16 @@ public sealed partial class HomeViewModel : ObservableObject
 
         try
         {
-            var sets = await _repository.GetAllAsync();
-
-            Sets.Clear();
-            foreach (var set in sets)
+            if (Sets.Count == 0)
             {
-                Sets.Add(set);
+                var sets = await _repository.GetAllAsync();
+                foreach (var set in sets)
+                {
+                    Sets.Add(set);
+                }
             }
 
-            await RefreshPracticeSubtitleAsync();
+            await RefreshProgressAsync();
         }
         catch (Exception ex)
         {
@@ -89,8 +109,9 @@ public sealed partial class HomeViewModel : ObservableObject
         }
     }
 
-    /// <summary>Shows how far through the dictionary the learner is.</summary>
-    private async Task RefreshPracticeSubtitleAsync()
+    /// <summary>Shows how far through the dictionary the learner is, and towards the
+    /// next milestone.</summary>
+    private async Task RefreshProgressAsync()
     {
         try
         {
@@ -101,13 +122,29 @@ public sealed partial class HomeViewModel : ObservableObject
             PracticeSubtitle = seen == 0
                 ? $"{total:N0} words · draws new ones each time"
                 : $"{seen:N0} of {total:N0} words started";
+
+            var learned = await _databases.Progress.CountLearnedAsync();
+            ShowMilestone(Milestones.Describe(learned));
         }
         catch (Exception ex)
         {
             // The bundled sets still work without the dictionary, so this is not fatal.
             System.Diagnostics.Debug.WriteLine($"Dictionary unavailable: {ex}");
             PracticeSubtitle = "Draws new words each time";
+            HasMilestone = false;
         }
+    }
+
+    private void ShowMilestone(MilestoneProgress milestone)
+    {
+        MilestoneHeadline = $"{milestone.Learned:N0} / {milestone.Target:N0} words learned";
+
+        // Deliberately terse: this sits beside the headline, and a longer phrasing pushes
+        // the headline into wrapping onto two lines.
+        MilestoneCaption = $"{milestone.Remaining:N0} to go";
+
+        MilestoneFraction = milestone.Fraction;
+        HasMilestone = true;
     }
 
     [RelayCommand]

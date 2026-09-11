@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using LexicycleApp.Services;
 using LexicycleCore.Dictionary;
 using LexicycleCore.Models;
+using LexicycleCore.Progress;
 using LexicycleCore.Services;
 using LexicycleCore.Session;
 
@@ -230,26 +231,51 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     private async Task GoToSummaryAsync()
     {
         var summary = _engine!.BuildSummary();
-
-        // Remember what was asked so the next generated session picks different words.
-        // Failing to save must not cost the learner their summary screen.
-        if (_practice is not null && _factory is not null)
-        {
-            try
-            {
-                await _factory.RecordAsync(_practice, summary);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Could not save progress: {ex}");
-            }
-        }
+        var milestone = await SaveProgressAsync(summary);
 
         await DismissKeyboardAsync();
 
-        await Shell.Current.GoToAsync(
-            $"{Routes.Summary}",
-            new Dictionary<string, object> { [Routes.SummaryParameter] = summary });
+        var parameters = new Dictionary<string, object> { [Routes.SummaryParameter] = summary };
+        if (milestone is not null)
+        {
+            parameters[Routes.MilestoneParameter] = milestone.Value;
+        }
+
+        await Shell.Current.GoToAsync($"{Routes.Summary}", parameters);
+    }
+
+    /// <summary>
+    /// Remembers what was asked so the next generated session picks different words, and
+    /// reports any milestone the session pushed the learner past.
+    ///
+    /// Failing to save must not cost the learner their summary screen, so everything here
+    /// is best-effort. Bundled and OCR'd sets are not recorded at all, and so never raise
+    /// a milestone — their words were chosen by hand and the rotation does not track them.
+    /// </summary>
+    private async Task<int?> SaveProgressAsync(SessionSummary summary)
+    {
+        if (_practice is null || _factory is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var progress = _databases.Progress;
+
+            // Measured either side of the write, so the comparison covers exactly this
+            // session and a milestone can only ever be celebrated once.
+            var before = await progress.CountLearnedAsync();
+            await _factory.RecordAsync(_practice, summary);
+            var after = await progress.CountLearnedAsync();
+
+            return Milestones.Crossed(before, after);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Could not save progress: {ex}");
+            return null;
+        }
     }
 
     private async Task DismissKeyboardAsync()

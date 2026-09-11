@@ -87,6 +87,19 @@ reads as "disk image is malformed". Use `exec-out`:
 adb exec-out "run-as com.yoyokits.lexicycle cat /data/data/com.yoyokits.lexicycle/files/progress.db" > progress.db
 ```
 
+**`adb shell pm clear` breaks a Debug install.** It deletes
+`files/.__override__/<abi>/`, where Fast Deployment keeps the managed assemblies, and the
+app then aborts on launch with *"No assemblies found … Assuming this is part of Fast
+Deployment. Exiting…"*. The message points at packaging and reads like a build problem;
+it is not. A plain `-t:Install` will not repair it either, because the APK is unchanged
+and the assembly push is skipped — `adb uninstall` first, then build with `-t:Install`.
+
+To start a run from zero progress, delete just the one file instead:
+
+```bash
+adb shell "run-as com.yoyokits.lexicycle rm -f files/progress.db"
+```
+
 **Tapping during app startup can trigger an ANR** on the emulator that does not reproduce
 once the app is up. Wait for the home screen before driving the UI.
 

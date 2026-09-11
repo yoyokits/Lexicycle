@@ -116,6 +116,58 @@
                 Text="{Binding ErrorMessage}"
                 TextColor="{StaticResource Danger}" />
 
+            <!--
+                Milestone bar. The fill width is set from code-behind against the measured
+                track width: a ColumnDefinition cannot carry a binding, because column and
+                row definitions do not inherit the page's BindingContext.
+            -->
+            <Border
+                IsVisible="{Binding HasMilestone}"
+                Margin="0,4,0,0"
+                Style="{StaticResource Card}">
+
+                <VerticalStackLayout Spacing="9">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label
+                            Grid.Column="0"
+                            FontAttributes="Bold"
+                            FontSize="15"
+                            Text="{Binding MilestoneHeadline}"
+                            VerticalOptions="Center" />
+
+                        <Label
+                            Grid.Column="1"
+                            Style="{StaticResource SubtleLabel}"
+                            Text="{Binding MilestoneCaption}"
+                            VerticalOptions="Center" />
+                    </Grid>
+
+                    <Border
+                        x:Name="MilestoneTrack"
+                        Padding="0"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200},
+                                                          Dark={StaticResource Gray600}}"
+                        HeightRequest="10"
+                        HorizontalOptions="Fill"
+                        StrokeThickness="0">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="5" />
+                        </Border.StrokeShape>
+
+                        <Border
+                            x:Name="MilestoneFill"
+                            BackgroundColor="{StaticResource Primary}"
+                            HorizontalOptions="Start"
+                            StrokeThickness="0"
+                            WidthRequest="0">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="5" />
+                            </Border.StrokeShape>
+                        </Border>
+                    </Border>
+                </VerticalStackLayout>
+            </Border>
+
             <Grid ColumnDefinitions="*,Auto">
                 <VerticalStackLayout Grid.Column="0">
                     <Label FontSize="15" Text="Ignore accents" />

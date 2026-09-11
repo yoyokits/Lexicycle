@@ -13,7 +13,7 @@ Phases are described in `docs/ROADMAP.md`.
 - [ ] **R-305** Practise German → English as well as English → German (reverse the pair at session start).
 - [ ] **R-306** About screen crediting Wiktionary and the upstream dataset under CC-BY-SA 4.0.
 - [ ] **R-310** A "reset progress" action in the UI. `IProgressStore.ResetAsync` is implemented and tested, but nothing calls it, so there is currently no way back to the start from the app.
-- [ ] **R-311** Show mastery on the home screen — words mastered, not just started.
+- [ ] **R-311** Show *mastery* on the home screen. The milestone bar (R-313) counts words answered correctly at least once, which is a weaker thing than reaching `ReviewSchedule.MasteredBox`; neither the home screen nor anywhere else surfaces the box a word has climbed to.
 - [ ] **R-312** Let the learner choose the session length; it is fixed at `PracticeSessionFactory.DefaultSize` (10).
 
 ## Data quality

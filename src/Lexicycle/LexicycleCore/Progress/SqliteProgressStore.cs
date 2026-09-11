@@ -114,6 +114,15 @@ public sealed class SqliteProgressStore : IProgressStore, IAsyncDisposable
         return rows.Select(row => row.ToProgress()).ToList();
     }
 
+    public async Task<int> CountLearnedAsync(CancellationToken cancellationToken = default)
+    {
+        await EnsureReadyAsync().ConfigureAwait(false);
+
+        return await _connection
+            .ExecuteScalarAsync<int>("SELECT COUNT(*) FROM word_progress WHERE times_correct > 0")
+            .ConfigureAwait(false);
+    }
+
     public async Task RecordAsync(
         int sessionNumber,
         IReadOnlyList<WordOutcome> outcomes,

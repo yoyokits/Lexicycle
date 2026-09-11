@@ -42,6 +42,11 @@ Bundled SQLite won over bundled JSON on query needs, not size: the whole diction
 536 KB either way, but session generation needs frequency-ordered queries with exclusion
 sets.
 
+A milestone bar at the foot of the home screen counts words answered correctly against
+the next rung — 10, 50, 100, 500, 1000, then every further thousand — and passing one is
+congratulated on the summary screen. The rungs are close together early, where a beginner
+needs to see movement, and widen once progress is steady.
+
 Still open: reverse-direction practice (R-305), the attribution screen (R-306), and a
 reset-progress action (R-310).
 

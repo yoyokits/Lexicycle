@@ -20,6 +20,13 @@ public interface IProgressStore
     Task<IReadOnlyList<WordProgress>> GetAllAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// How many distinct words have been answered correctly in at least one session.
+    /// This is what the milestone bar counts, so it is a query of its own rather than a
+    /// pass over <see cref="GetAllAsync"/> — the home screen asks for it on every visit.
+    /// </summary>
+    Task<int> CountLearnedAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Records the results of a finished session, promoting or demoting each word
     /// according to <see cref="ReviewSchedule"/>.
     /// </summary>
