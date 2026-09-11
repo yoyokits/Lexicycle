@@ -25,33 +25,50 @@ def _human_size(byte_count: int) -> str:
     return f"{size:,.1f} GB"
 
 
-def _require_parquet() -> list[Path]:
-    files = sources.find_parquet_files()
-    if not files:
+def _require_download() -> None:
+    if not sources.is_downloaded():
         sys.exit(
-            "No parquet files under data/raw.\n"
-            "Run `python -m lexicycle_data download` first (~287 MB, one time)."
+            f"{sources.distilled_path()} not found.\n"
+            "Run `python -m lexicycle_data download` first (streams ~3.2 GB, one time)."
         )
-    return files
 
 
 def command_download(_args: argparse.Namespace) -> None:
     paths.ensure_dirs()
-    print(f"Downloading {sources.DATASET_ID} (~287 MB) ...")
-    destination = sources.download()
-    files = sources.find_parquet_files()
-    print(f"Downloaded {len(files)} parquet file(s) to {destination}")
+    print("Streaming the English Wiktionary extract (~3.2 GB) and distilling it ...")
+
+    try:
+        destination = sources.download()
+    except Exception as error:
+        if "CERTIFICATE_VERIFY_FAILED" in str(error):
+            sys.exit(
+                "TLS verification failed.\n\n"
+                "Something on this machine is inspecting HTTPS traffic (antivirus or a\n"
+                "corporate proxy) and signing it with a root certificate that Python's\n"
+                "bundled CA list does not carry. Install `truststore` so verification\n"
+                "uses the OS certificate store instead:\n\n"
+                "    pip install truststore\n"
+            )
+        raise
+
+    size = destination.stat().st_size
+    print(f"Wrote {destination}  ({_human_size(size)})")
 
 
 def command_build(args: argparse.Namespace) -> None:
-    files = _require_parquet()
+    _require_download()
     db_path = paths.dictionary_db(args.pair)
 
-    print(f"Reading {len(files)} parquet file(s) ...")
-    entries = rows_to_entries(sources.iter_rows(files))
-    lookup = build_rank_lookup("en")
+    print("Reading the distilled extract ...")
+    entries = rows_to_entries(sources.iter_rows())
 
-    stats = build_database(entries, db_path, top_n=args.top_n, rank_lookup=lookup)
+    stats = build_database(
+        entries,
+        db_path,
+        top_n=args.top_n,
+        rank_lookup=build_rank_lookup("en"),
+        german_rank_lookup=build_rank_lookup("de"),
+    )
 
     print(f"Considered {stats.considered:,} upstream rows")
     print(f"  English words : {stats.english:,}")
@@ -62,12 +79,13 @@ def command_build(args: argparse.Namespace) -> None:
 
 def command_report(args: argparse.Namespace) -> None:
     """Build at several cut-offs and print the resulting sizes side by side."""
-    files = _require_parquet()
+    _require_download()
     lookup = build_rank_lookup("en")
+    german_lookup = build_rank_lookup("de")
 
-    print("Reading parquet once and caching entries in memory ...")
-    entries = list(rows_to_entries(sources.iter_rows(files)))
-    print(f"{len(entries):,} German lemmas have at least one English translation.\n")
+    print("Reading the distilled extract once and caching entries in memory ...")
+    entries = list(rows_to_entries(sources.iter_rows()))
+    print(f"{len(entries):,} English lemmas have at least one German translation.\n")
 
     scratch = paths.DIST_DIR / "_report.db"
     header = f"{'top-N':>8}  {'EN words':>10}  {'DE words':>10}  {'pairs':>10}  {'size':>10}"
@@ -76,7 +94,10 @@ def command_report(args: argparse.Namespace) -> None:
 
     try:
         for size in (*REPORT_SIZES, None):
-            stats = build_database(entries, scratch, top_n=size, rank_lookup=lookup)
+            stats = build_database(
+                entries, scratch, top_n=size,
+                rank_lookup=lookup, german_rank_lookup=german_lookup,
+            )
             label = f"{size:,}" if size else "all"
             print(
                 f"{label:>8}  {stats.english:>10,}  {stats.german:>10,}  "
@@ -110,7 +131,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    download = subparsers.add_parser("download", help="fetch the upstream parquet files (~287 MB)")
+    download = subparsers.add_parser(
+        "download", help="stream the English Wiktionary extract and distil it (~3.2 GB)"
+    )
     download.set_defaults(func=command_download)
 
     build = subparsers.add_parser("build", help="generate the small SQLite dictionary")

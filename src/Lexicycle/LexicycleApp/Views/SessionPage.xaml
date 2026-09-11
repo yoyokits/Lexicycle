@@ -70,26 +70,39 @@
                 IsVisible="{Binding HasError}"
                 Text="{Binding ErrorMessage}"
                 TextColor="{StaticResource Danger}" />
+
+            <!--  Offered when a set has no unasked words left; see CanRestartSet.  -->
+            <Button
+                Margin="0,8,0,0"
+                Command="{Binding RestartSetCommand}"
+                HorizontalOptions="Center"
+                IsVisible="{Binding CanRestartSet}"
+                Text="Start this set again" />
         </VerticalStackLayout>
 
         <!--  Answer  -->
         <VerticalStackLayout Grid.Row="2" Spacing="12">
+            <!--  Hidden when there is no question on screen — see IsAnswering.  -->
             <Entry
                 x:Name="AnswerEntry"
                 ClearButtonVisibility="WhileEditing"
                 FontSize="20"
                 IsEnabled="{Binding CanType}"
+                IsVisible="{Binding IsAnswering}"
                 Placeholder="Type the translation"
                 ReturnCommand="{Binding SubmitCommand}"
                 ReturnType="Done"
                 Text="{Binding Answer}" />
 
-            <Button Command="{Binding SubmitCommand}" Text="{Binding ActionButtonText}" />
+            <Button
+                Command="{Binding SubmitCommand}"
+                IsVisible="{Binding IsAnswering}"
+                Text="{Binding ActionButtonText}" />
 
             <Button
                 Command="{Binding QuitCommand}"
                 Style="{StaticResource SecondaryButton}"
-                Text="End session" />
+                Text="{Binding QuitButtonText}" />
         </VerticalStackLayout>
 
         <ActivityIndicator

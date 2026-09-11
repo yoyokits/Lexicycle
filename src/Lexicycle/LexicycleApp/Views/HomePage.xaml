@@ -10,30 +10,67 @@
 
     <Grid Padding="20,16" RowDefinitions="Auto,*,Auto">
 
-        <Label
-            Grid.Row="0"
-            Margin="0,0,0,12"
-            Style="{StaticResource SubtleLabel}"
-            Text="Pick a set to practise. Missed words come back each round until you get them right." />
+        <VerticalStackLayout Grid.Row="0" Spacing="12">
+            <Label
+                Style="{StaticResource SubtleLabel}"
+                Text="Missed words come back each round until you get them right." />
+
+            <!--  The dictionary-backed session: different words every time.  -->
+            <Border Style="{StaticResource Card}">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding StartPracticeCommand}" />
+                </Border.GestureRecognizers>
+
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                    <Label
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        FontAttributes="Bold"
+                        FontSize="18"
+                        Text="Practice" />
+
+                    <Label
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        Style="{StaticResource SubtleLabel}"
+                        Text="{Binding PracticeSubtitle}" />
+
+                    <Label
+                        Grid.Row="0"
+                        Grid.RowSpan="2"
+                        Grid.Column="1"
+                        FontAttributes="Bold"
+                        FontSize="14"
+                        Text="en → de"
+                        TextColor="{StaticResource Primary}"
+                        VerticalOptions="Center" />
+                </Grid>
+            </Border>
+
+            <Label
+                Margin="0,8,0,0"
+                Style="{StaticResource SubtleLabel}"
+                Text="Or work through a band of the dictionary:" />
+        </VerticalStackLayout>
 
         <CollectionView
             Grid.Row="1"
-            ItemsSource="{Binding Sets}"
+            ItemsSource="{Binding Bands}"
             SelectionMode="None">
 
             <CollectionView.EmptyView>
                 <Label
                     HorizontalTextAlignment="Center"
                     Style="{StaticResource SubtleLabel}"
-                    Text="No vocabulary sets available." />
+                    Text="No vocabulary available." />
             </CollectionView.EmptyView>
 
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="models:VocabularySet">
+                <DataTemplate x:DataType="vm:HomeViewModel+BandRow">
                     <Border Margin="0,0,0,10" Style="{StaticResource Card}">
                         <Border.GestureRecognizers>
                             <TapGestureRecognizer
-                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:HomeViewModel}}, Path=StartCommand}"
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:HomeViewModel}}, Path=StartBandCommand}"
                                 CommandParameter="{Binding .}" />
                         </Border.GestureRecognizers>
 
@@ -49,7 +86,7 @@
                                 Grid.Row="1"
                                 Grid.Column="0"
                                 Style="{StaticResource SubtleLabel}"
-                                Text="{Binding WordCount, StringFormat='{0} words'}" />
+                                Text="{Binding Subtitle}" />
 
                             <Label
                                 Grid.Row="0"
@@ -57,7 +94,7 @@
                                 Grid.Column="1"
                                 FontAttributes="Bold"
                                 FontSize="14"
-                                Text="{Binding LanguagePair}"
+                                Text="en → de"
                                 TextColor="{StaticResource Primary}"
                                 VerticalOptions="Center" />
                         </Grid>
@@ -78,6 +115,58 @@
                 Style="{StaticResource SubtleLabel}"
                 Text="{Binding ErrorMessage}"
                 TextColor="{StaticResource Danger}" />
+
+            <!--
+                Milestone bar. The fill width is set from code-behind against the measured
+                track width: a ColumnDefinition cannot carry a binding, because column and
+                row definitions do not inherit the page's BindingContext.
+            -->
+            <Border
+                IsVisible="{Binding HasMilestone}"
+                Margin="0,4,0,0"
+                Style="{StaticResource Card}">
+
+                <VerticalStackLayout Spacing="9">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label
+                            Grid.Column="0"
+                            FontAttributes="Bold"
+                            FontSize="15"
+                            Text="{Binding MilestoneHeadline}"
+                            VerticalOptions="Center" />
+
+                        <Label
+                            Grid.Column="1"
+                            Style="{StaticResource SubtleLabel}"
+                            Text="{Binding MilestoneCaption}"
+                            VerticalOptions="Center" />
+                    </Grid>
+
+                    <Border
+                        x:Name="MilestoneTrack"
+                        Padding="0"
+                        BackgroundColor="{AppThemeBinding Light={StaticResource Gray200},
+                                                          Dark={StaticResource Gray600}}"
+                        HeightRequest="10"
+                        HorizontalOptions="Fill"
+                        StrokeThickness="0">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="5" />
+                        </Border.StrokeShape>
+
+                        <Border
+                            x:Name="MilestoneFill"
+                            BackgroundColor="{StaticResource Primary}"
+                            HorizontalOptions="Start"
+                            StrokeThickness="0"
+                            WidthRequest="0">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="5" />
+                            </Border.StrokeShape>
+                        </Border>
+                    </Border>
+                </VerticalStackLayout>
+            </Border>
 
             <Grid ColumnDefinitions="*,Auto">
                 <VerticalStackLayout Grid.Column="0">

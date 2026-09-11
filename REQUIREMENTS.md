@@ -10,12 +10,19 @@ Phases are described in `docs/ROADMAP.md`.
 
 ## Phase 3 — Dictionary in the app
 
-- [ ] **R-301** Decide bundled-SQLite vs bundled-JSON from the `report` numbers, and record the decision in `docs/DATA-SOURCES.md`.
-- [ ] **R-302** Add `sqlite-net-pcl` and a `SqliteVocabularyRepository` in `LexicycleCore` behind the existing `IVocabularySetRepository`.
-- [ ] **R-303** Bundle the generated `lexicycle-dict-en-de.db` as a `MauiAsset` and copy it to `AppDataDirectory` on first run.
-- [ ] **R-304** "Generate session from dictionary": pick N words at random or from a chosen frequency band.
 - [ ] **R-305** Practise German → English as well as English → German (reverse the pair at session start).
 - [ ] **R-306** About screen crediting Wiktionary and the upstream dataset under CC-BY-SA 4.0.
+- [ ] **R-323** A global "reset all progress" action. Per-set restart exists (R-310), but `IProgressStore.ResetAsync`, which clears every scope including the dictionary, still has no caller.
+- [ ] **R-311** Show *mastery* on the home screen. The milestone bar (R-313) counts words answered correctly at least once, which is a weaker thing than reaching `ReviewSchedule.MasteredBox`; neither the home screen nor anywhere else surfaces the box a word has climbed to.
+- [ ] **R-312** Let the learner choose the session length; it is fixed at `PracticeSessionFactory.DefaultSize` (10).
+
+## Data quality
+
+Known limitations of the generated dictionary, detailed in `docs/DATA-SOURCES.md`.
+
+- [ ] **R-308** Improve sense selection so `go → gehen` rather than `machen`. The primary sense is currently just Wiktionary's first, which is often not the common meaning.
+- [ ] **R-509** Admit genuine phrasal verbs ("get in", "make up") as prompts while still rejecting phrase fragments ("as in", "what if").
+- [ ] **R-510** Filter untagged regional forms. Frequency ordering catches `Liab` and `Ziit`, but `home → Ham | Heim | …` still leads with a regionalism because `Ham` scores as ordinary German.
 
 ## Phase 4 — OCR photo input
 
@@ -27,13 +34,11 @@ Phases are described in `docs/ROADMAP.md`.
 
 ## Phase 5 — Enrichment
 
-- [ ] **R-501** Show grammatical gender and part of speech during practice (data already in `words_de`).
+- [ ] **R-501** Show grammatical gender and part of speech during practice (gender is in `words_de`, part of speech in `words_en`).
 - [ ] **R-502** Example sentences, sourced from the fuller upstream dataset, as a side table.
-- [ ] **R-503** Frequency-banded practice ("the 500 most common words").
-- [ ] **R-504** Additional language pairs (`en-es`, `de-es`) via the pair-parameterised pipeline.
+- [ ] **R-504** Additional language pairs (`en-es`, `de-es`) via the pair-parameterised pipeline. The English edition carries translations for every language, so this is a filter change rather than a new source.
+- [ ] **R-508** German→English practice sourced from the German edition, where its English-side fragmentation does not matter.
 - [ ] **R-505** User-created and imported vocabulary sets.
-- [ ] **R-506** Session history persisted locally, with per-word progress over time.
-- [ ] **R-507** Spaced repetition scheduling across sessions.
 
 ## Cross-cutting
 

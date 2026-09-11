@@ -8,12 +8,14 @@ namespace LexicycleApp;
 
 public static class MauiProgram
 {
-    /// <summary>Bundled vocabulary sets, as <c>MauiAsset</c> logical names.</summary>
-    private static readonly string[] BundledSets =
-    [
-        "sets/en-de-basics.json",
-        "sets/en-es-basics.json",
-    ];
+    /// <summary>
+    /// No sets ship as JSON any more. The starter files held twelve words each — enough
+    /// to demonstrate the trainer before the dictionary existed, and useless once it did.
+    /// Vocabulary now comes from the dictionary, sliced into frequency bands.
+    ///
+    /// The repository seam stays for the sets OCR will produce (R-404).
+    /// </summary>
+    private static readonly string[] BundledSets = [];
 
     public static MauiApp CreateMauiApp()
     {
@@ -28,6 +30,7 @@ public static class MauiProgram
 
         // Services
         builder.Services.AddSingleton<AppSettings>();
+        builder.Services.AddSingleton<AppDatabases>();
         builder.Services.AddSingleton<IAssetProvider, MauiAssetProvider>();
         builder.Services.AddSingleton<IVocabularySetRepository>(provider =>
             new BundledJsonVocabularySetRepository(

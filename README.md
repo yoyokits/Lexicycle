@@ -11,11 +11,14 @@ so every word has been answered correctly at least once.
 
 Android, offline, no backend.
 
-- **Working now:** the trainer, running on two bundled starter sets (English–German and
-  English–Spanish), plus an offline pipeline that turns German Wiktionary into a small
-  English↔German dictionary.
-- **Next:** wiring that generated dictionary into the app, then OCR — photograph a book
-  page and practise the words on it.
+- **Working now:** the trainer, a bundled English–German dictionary generated from
+  Wiktionary — 3,545 prompts against 5,154 German words — and sessions that remember what
+  you have seen. **No word is ever asked twice.** Each session is at least 80% material
+  you have never met, most common first, with a small slice of revision weighted towards
+  what you get wrong.
+- **Pick your level:** Basics (the 1,000 most common words), Common words (the next
+  1,000), or Wider vocabulary — or Practice straight through the whole dictionary.
+- **Next:** OCR — photograph a book page and practise the words on it.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan and
 [`REQUIREMENTS.md`](REQUIREMENTS.md) for what's outstanding.
@@ -28,9 +31,8 @@ dotnet test
 dotnet build src/Lexicycle/LexicycleApp/LexicycleApp.csproj -f net10.0-android -t:Run
 ```
 
-Requires the .NET 10 SDK with the `maui` and `android` workloads. If the JDK or Android
-SDK aren't found, copy `Directory.Build.props.user.sample` to
-`Directory.Build.props.user` and set the paths.
+Requires the .NET 10 SDK with the `maui` and `android` workloads. Full setup, emulator
+instructions and the data pipeline are in [`docs/BUILD.md`](docs/BUILD.md).
 
 ## Layout
 
@@ -44,9 +46,15 @@ SDK aren't found, copy `Directory.Build.props.user.sample` to
 
 ## Data and licensing
 
-Dictionary data derives from [German Wiktionary](https://de.wiktionary.org) via the
-[`cstr/de-wiktionary-extracted`](https://huggingface.co/datasets/cstr/de-wiktionary-extracted)
-export, licensed **CC-BY-SA 4.0**. Any generated dictionary carries the same licence.
-Details in [`docs/DATA-SOURCES.md`](docs/DATA-SOURCES.md).
+Dictionary data derives from the [English Wiktionary](https://en.wiktionary.org) via the
+[kaikki.org](https://kaikki.org/dictionary/English/) machine-readable export, licensed
+**CC-BY-SA 4.0**. Any generated dictionary carries the same licence. Details in
+[`docs/DATA-SOURCES.md`](docs/DATA-SOURCES.md).
+
+The German Wiktionary edition was tried first and rejected: `wiktextract` shatters
+multi-word English translations there into separate word-level entries, so "piece of
+furniture" becomes `item`, `piece`, `of`, `furniture`. That is a correctness decision, not
+a convenience one — the reasoning is in `docs/DATA-SOURCES.md` and should be read before
+changing the source.
 
 The application code is licensed under the [MIT License](LICENSE).

@@ -6,8 +6,10 @@ import pytest
 
 from lexicycle_data.model import (
     clean_term,
-    extract_english,
     extract_gender,
+    extract_german,
+    is_drillable_prompt,
+    primary_sense_translations,
     row_to_entry,
     rows_to_entries,
 )
@@ -19,10 +21,10 @@ class TestCleanTerm:
     @pytest.mark.parametrize(
         ("raw", "expected"),
         [
-            ("house", "house"),
-            ("  house  ", "house"),
-            ("ice   cream", "ice cream"),
-            ("schadenfreude (loanword)", "schadenfreude"),
+            ("Haus", "Haus"),
+            ("  Haus  ", "Haus"),
+            ("sich   freuen", "sich freuen"),
+            ("Säbel (curved)", "Säbel"),
         ],
     )
     def test_normalises_usable_terms(self, raw, expected):
@@ -34,11 +36,9 @@ class TestCleanTerm:
             None,
             "",
             "   ",
-            # Square brackets wrap glosses. Stripping them would leave "malicious joy",
-            # which reads like a real term but is not the translation.
-            "malicious joy [at another's misfortune]",
-            "run [informal]",
-            "joy at the misfortune of other people",  # too many words
+            # Square brackets wrap glosses; stripping them would leave a wrong term.
+            "Klinge [poetic]",
+            "a long bladed weapon for cutting",  # too many words
             "---",  # no letters
             123,  # not a string
         ],
@@ -61,59 +61,117 @@ class TestExtractGender:
             (["plural"], None),
         ],
     )
-    def test_reads_gender_from_tags(self, tags, expected):
+    def test_reads_gender_from_translation_tags(self, tags, expected):
         assert extract_gender(tags) == expected
 
 
-class TestExtractEnglish:
-    def test_keeps_only_english_translations(self):
+class TestPrimarySense:
+    def test_keeps_only_the_first_sense(self):
         translations = [
-            translation("house"),
-            translation("maison", lang_code="fr"),
-            translation("casa", lang_code="es"),
+            translation("rennen", "to move quickly on two feet"),
+            translation("laufen", "to move quickly on two feet"),
+            translation("umlaufen", "to move or spread quickly"),
         ]
 
-        assert extract_english(translations) == ("house",)
+        kept = [t["word"] for t in primary_sense_translations(translations)]
+
+        assert kept == ["rennen", "laufen"]
+
+    def test_keeps_everything_when_no_senses_are_labelled(self):
+        translations = [translation("Haus"), translation("Gebäude")]
+
+        assert len(primary_sense_translations(translations)) == 2
+
+    def test_handles_an_empty_list(self):
+        assert primary_sense_translations([]) == []
+
+
+class TestExtractGerman:
+    def test_returns_terms_with_their_gender(self):
+        result = extract_german(
+            [
+                translation("Auto", "automobile", ["neuter"]),
+                translation("Wagen", "automobile", ["masculine"]),
+            ]
+        )
+
+        assert result == (("Auto", "neuter"), ("Wagen", "masculine"))
 
     def test_deduplicates_while_preserving_order(self):
-        translations = [translation("car"), translation("automobile"), translation("car")]
+        result = extract_german(
+            [
+                translation("Katze", "animal", ["feminine"]),
+                translation("Katze", "animal", ["feminine"]),
+            ]
+        )
 
-        assert extract_english(translations) == ("car", "automobile")
+        assert result == (("Katze", "feminine"),)
 
-    def test_skips_uncertain_translations(self):
-        assert extract_english([translation("gloating", uncertain=True)]) == ()
+    def test_skips_obsolete_and_archaic_translations(self):
+        result = extract_german(
+            [
+                translation("Schwert", "weapon", ["neuter"]),
+                translation("Degen", "weapon", ["masculine", "obsolete"]),
+            ]
+        )
+
+        assert result == (("Schwert", "neuter"),)
 
     def test_handles_missing_translations(self):
-        assert extract_english(None) == ()
-        assert extract_english([]) == ()
+        assert extract_german(None) == ()
+        assert extract_german([]) == ()
 
 
 class TestRowToEntry:
     def test_maps_a_complete_row(self):
         entry = row_to_entry(
             {
-                "word": "Haus",
+                "word": "house",
                 "pos": "noun",
-                "lang_code": "de",
-                "tags": ["neuter"],
-                "translations": [translation("house")],
+                "lang_code": "en",
+                "translations": [translation("Haus", "building", ["neuter"])],
             }
         )
 
         assert entry is not None
-        assert entry.word == "Haus"
+        assert entry.word == "house"
         assert entry.pos == "noun"
-        assert entry.gender == "neuter"
-        assert entry.english == ("house",)
+        assert entry.german == (("Haus", "neuter"),)
 
-    def test_drops_a_row_without_english(self):
-        assert row_to_entry({"word": "Haus", "lang_code": "de", "translations": []}) is None
+    def test_drops_a_row_without_german(self):
+        row = {"word": "nonesuch", "pos": "noun", "lang_code": "en", "translations": []}
+
+        assert row_to_entry(row) is None
+
+    @pytest.mark.parametrize("pos", ["article", "prep", "conj", "particle", "det"])
+    def test_drops_function_words(self, pos):
+        """`the -> der | die | das` is not vocabulary worth drilling."""
+        row = {
+            "word": "the",
+            "pos": pos,
+            "lang_code": "en",
+            "translations": [translation("der")],
+        }
+
+        assert row_to_entry(row) is None
+
+    @pytest.mark.parametrize("pos", ["noun", "verb", "adj", "adv"])
+    def test_keeps_content_words(self, pos):
+        row = {
+            "word": "x",
+            "pos": pos,
+            "lang_code": "en",
+            "translations": [translation("Ypsilon")],
+        }
+
+        assert row_to_entry(row) is not None
 
     def test_drops_a_row_from_another_language_edition(self):
         row = {
-            "word": "house",
-            "lang_code": "en",
-            "translations": [translation("Haus", lang_code="de")],
+            "word": "Haus",
+            "pos": "noun",
+            "lang_code": "de",
+            "translations": [translation("house")],
         }
 
         assert row_to_entry(row) is None
@@ -123,9 +181,54 @@ def test_rows_to_entries_filters_the_stream(rows):
     entries = list(rows_to_entries(rows))
     words = [entry.word for entry in entries]
 
-    assert "Haus" in words
-    assert "Ohnegleichen" not in words  # no English translation
-    assert "house" not in words  # wrong language edition
+    assert "house" in words
+    assert "nonesuch" not in words  # no German translation
+    assert "the" not in words  # function word
+    assert "Haus" not in words  # wrong language edition
 
-    schadenfreude = next(entry for entry in entries if entry.word == "Schadenfreude")
-    assert schadenfreude.english == ("schadenfreude",)
+    house = next(entry for entry in entries if entry.word == "house")
+    assert house.german == (("Haus", "neuter"), ("Gebäude", "neuter"))
+
+    sword = next(entry for entry in entries if entry.word == "sword")
+    assert sword.german == (("Schwert", "neuter"), ("Säbel", "masculine"))
+
+
+class TestDrillablePrompt:
+    """Which English headwords are worth asking at all."""
+
+    @pytest.mark.parametrize("word", ["house", "furniture", "quickly", "Catholicize"])
+    def test_keeps_content_words(self, word):
+        assert is_drillable_prompt(word)
+
+    @pytest.mark.parametrize("word", ["the", "that", "in", "so", "when", "more", "There"])
+    def test_rejects_function_words(self, word):
+        """`in -> herein` and `that -> dermaßen` are grammar, not vocabulary."""
+        assert not is_drillable_prompt(word)
+
+    @pytest.mark.parametrize("word", ["as in", "what if", "get in", "make up"])
+    def test_rejects_multi_word_prompts_in_v1(self, word):
+        assert not is_drillable_prompt(word)
+
+
+class TestDialectFiltering:
+    """Wiktionary lists regional forms beside the standard word."""
+
+    @pytest.mark.parametrize(
+        "tag",
+        ["Alemannic-German", "Swiss", "Bavarian", "Palatine", "Rhine-Franconian", "dialectal"],
+    )
+    def test_rejects_regionally_tagged_translations(self, tag):
+        result = extract_german(
+            [
+                translation("Zeit", "time", ["feminine"]),
+                translation("Ziit", "time", [tag, "feminine"]),
+            ]
+        )
+
+        assert result == (("Zeit", "feminine"),)
+
+    def test_rejects_morphological_fragments(self):
+        """"most" offers "-ste" and "am ...-sten", which are endings, not words."""
+        assert clean_term("-ste") is None
+        assert clean_term("am ...-sten") is None
+        assert clean_term("sten-") is None

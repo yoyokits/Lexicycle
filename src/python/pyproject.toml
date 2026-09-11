@@ -7,6 +7,9 @@ dependencies = [
     "huggingface-hub>=0.27",
     "pyarrow>=18.0",
     "wordfreq>=3.1",
+    # Verify TLS against the OS certificate store. Needed wherever antivirus or a
+    # corporate proxy inspects HTTPS with its own root CA; see sources.py.
+    "truststore>=0.10",
 ]
 
 [project.optional-dependencies]

@@ -37,4 +37,28 @@ public sealed class VocabularySet
 
     /// <summary>Display form of the direction, e.g. "en → de".</summary>
     public string LanguagePair => $"{SourceLanguage} → {TargetLanguage}";
+
+    /// <summary>
+    /// The same set with its words in a new random order.
+    ///
+    /// Sets are stored in a fixed order — file order for the bundled JSON, frequency
+    /// order for a generated session — and asking them in that order makes every visit to
+    /// a fixed set identical: "German basics" opened with <c>house dog cat car</c> every
+    /// single time. A session is composed of words, not of a sequence, so the order is
+    /// chosen when the session starts rather than baked into the set.
+    /// </summary>
+    public VocabularySet Shuffled(Random? random = null)
+    {
+        var rng = random ?? Random.Shared;
+        var words = Words.ToArray();
+
+        // Fisher-Yates.
+        for (var i = words.Length - 1; i > 0; i--)
+        {
+            var j = rng.Next(i + 1);
+            (words[i], words[j]) = (words[j], words[i]);
+        }
+
+        return new VocabularySet(Id, Name, SourceLanguage, TargetLanguage, words);
+    }
 }

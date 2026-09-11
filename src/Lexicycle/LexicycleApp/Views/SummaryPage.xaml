@@ -12,9 +12,56 @@
         VerticalStackLayout makes it measure against infinite height, which collapses
         every other row in the Grid to zero.
     -->
-    <Grid Padding="20,16" RowDefinitions="Auto,Auto,*,Auto">
+    <Grid Padding="20,16" RowDefinitions="Auto,Auto,Auto,*,Auto">
 
-        <VerticalStackLayout Grid.Row="0" Spacing="6">
+        <!--
+            The milestone banner. Starts invisible and is animated in by the code-behind,
+            so the opacity and scale here are the pre-animation state, not the final look.
+        -->
+        <Border
+            x:Name="MilestoneBanner"
+            Grid.Row="0"
+            Margin="0,0,0,18"
+            Padding="18,16"
+            BackgroundColor="{StaticResource Primary}"
+            IsVisible="{Binding HasMilestone}"
+            Opacity="0"
+            Scale="0.8"
+            StrokeThickness="0">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="16" />
+            </Border.StrokeShape>
+
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                <Label
+                    x:Name="MilestoneBadge"
+                    Grid.Column="0"
+                    FontSize="40"
+                    Text="🏆"
+                    VerticalOptions="Center" />
+
+                <VerticalStackLayout
+                    x:Name="MilestoneText"
+                    Grid.Column="1"
+                    Opacity="0"
+                    Spacing="3"
+                    TranslationY="8"
+                    VerticalOptions="Center">
+                    <Label
+                        FontAttributes="Bold"
+                        FontSize="20"
+                        Text="{Binding MilestoneTitle}"
+                        TextColor="White" />
+                    <Label
+                        FontSize="13"
+                        Text="{Binding MilestoneMessage}"
+                        TextColor="White"
+                        Opacity="0.85" />
+                </VerticalStackLayout>
+            </Grid>
+        </Border>
+
+        <VerticalStackLayout Grid.Row="1" Spacing="6">
             <Label
                 FontAttributes="Bold"
                 FontSize="32"
@@ -23,14 +70,14 @@
         </VerticalStackLayout>
 
         <Label
-            Grid.Row="1"
+            Grid.Row="2"
             Margin="0,24,0,10"
             FontAttributes="Bold"
             IsVisible="{Binding HasMissedWords}"
             Text="Worth another look" />
 
         <CollectionView
-            Grid.Row="2"
+            Grid.Row="3"
             ItemsSource="{Binding MissedWords}"
             SelectionMode="None">
 
@@ -71,7 +118,7 @@
         </CollectionView>
 
         <Button
-            Grid.Row="3"
+            Grid.Row="4"
             Margin="0,12,0,0"
             Command="{Binding DoneCommand}"
             Text="Back to sets" />

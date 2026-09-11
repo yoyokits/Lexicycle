@@ -23,12 +23,23 @@ public sealed partial class SummaryViewModel : ObservableObject, IQueryAttributa
     [ObservableProperty]
     private bool _wasPerfect;
 
+    [ObservableProperty]
+    private bool _hasMilestone;
+
+    [ObservableProperty]
+    private string _milestoneTitle = string.Empty;
+
+    [ObservableProperty]
+    private string _milestoneMessage = string.Empty;
+
     public ObservableCollection<MissedWordRow> MissedWords { get; } = [];
 
     public bool HasMissedWords => MissedWords.Count > 0;
 
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
+        ApplyMilestone(query);
+
         if (!query.TryGetValue(Routes.SummaryParameter, out var value) || value is not SessionSummary summary)
         {
             return;
@@ -50,6 +61,34 @@ public sealed partial class SummaryViewModel : ObservableObject, IQueryAttributa
 
         OnPropertyChanged(nameof(HasMissedWords));
     }
+
+    /// <summary>
+    /// Sets up the congratulation when this session pushed the learner past a milestone.
+    /// The parameter is absent the rest of the time, which is the overwhelming majority
+    /// of sessions — that rarity is what makes it worth celebrating.
+    /// </summary>
+    private void ApplyMilestone(IDictionary<string, object> query)
+    {
+        if (!query.TryGetValue(Routes.MilestoneParameter, out var raw) || raw is not int milestone)
+        {
+            HasMilestone = false;
+            return;
+        }
+
+        MilestoneTitle = $"{milestone:N0} words learned";
+        MilestoneMessage = Encouragement(milestone);
+        HasMilestone = true;
+    }
+
+    private static string Encouragement(int milestone) => milestone switch
+    {
+        10 => "Your first milestone. The hardest one is behind you.",
+        50 => "Fifty words is enough to start recognising them in the wild.",
+        100 => "Triple figures. That is a real vocabulary now.",
+        500 => "Five hundred words covers most of an ordinary conversation.",
+        1000 => "A thousand words. This is what fluency is built on.",
+        _ => $"{milestone:N0} words and still going. Remarkable.",
+    };
 
     [RelayCommand]
     private static Task DoneAsync() => Shell.Current.GoToAsync(Routes.Home);
