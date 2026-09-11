@@ -18,14 +18,14 @@ SCHEMA = """
 CREATE TABLE words_en (
     id        INTEGER PRIMARY KEY,
     text      TEXT    NOT NULL UNIQUE,
+    pos       TEXT,
     freq_rank INTEGER
 );
 
 CREATE TABLE words_de (
     id     INTEGER PRIMARY KEY,
     text   TEXT    NOT NULL UNIQUE,
-    gender TEXT,
-    pos    TEXT
+    gender TEXT
 );
 
 CREATE TABLE translations (
@@ -60,34 +60,71 @@ class BuildStats:
         )
 
 
+#: Answers beyond this many make a prompt ambiguous rather than rich.
+MAX_ANSWERS = 4
+
+#: A German answer this much rarer than the entry's best one is a dialect or archaic
+#: variant riding along with the standard word, and is dropped.
+_RANK_GAP = 1_500
+
+
+def _best_answers(
+    german: tuple[tuple[str, str | None], ...],
+    rank_lookup: RankLookup,
+) -> list[tuple[str, str | None]]:
+    """Order an entry's German answers by real-world frequency and keep the best few.
+
+    Wiktionary lists dialect forms beside the standard word and not always after it —
+    "love" offers Liab before Liebe — so source order cannot pick the primary answer.
+    Frequency can: Liebe is common German, Liab is not.
+    """
+    if len(german) <= 1:
+        return list(german)
+
+    ranked = sorted(german, key=lambda pair: (rank_lookup(pair[0]), pair[0]))
+    best = rank_lookup(ranked[0][0])
+
+    return [
+        pair for pair in ranked if rank_lookup(pair[0]) - best <= _RANK_GAP
+    ][:MAX_ANSWERS]
+
+
 def build_database(
     entries: Iterable[Entry],
     db_path: Path,
     top_n: int | None = 5000,
     rank_lookup: RankLookup | None = None,
+    german_rank_lookup: RankLookup | None = None,
 ) -> BuildStats:
     """Write ``entries`` to a fresh SQLite file at ``db_path``.
 
     ``top_n`` keeps only the most frequent English words (and the German words paired
-    with them); pass None to keep everything.
+    with them); pass None to keep everything. ``german_rank_lookup`` orders each entry's
+    answers so the standard German word, not a dialect variant, is the one displayed.
     """
     rank_lookup = rank_lookup or null_rank_lookup()
+    german_rank_lookup = german_rank_lookup or null_rank_lookup()
 
     # Collect first so English words can be ranked before the top-N cut is applied.
     pairs: set[tuple[str, str]] = set()
-    german: dict[str, Entry] = {}
+    english: dict[str, str | None] = {}
+    german: dict[str, str | None] = {}
     considered = 0
 
     for entry in entries:
         considered += 1
 
-        # First spelling of a lemma wins; later duplicates only differ by sense.
-        german.setdefault(entry.word, entry)
+        # First entry for a lemma wins; later ones are other parts of speech.
+        english.setdefault(entry.word, entry.pos)
 
-        for english_term in entry.english:
-            pairs.add((english_term, entry.word))
+        for german_term, gender in _best_answers(entry.german, german_rank_lookup):
+            pairs.add((entry.word, german_term))
 
-    english_terms = {english for english, _ in pairs}
+            # Fill in a gender discovered on any occurrence of the term.
+            if german.get(german_term) is None:
+                german[german_term] = gender
+
+    english_terms = {term for term, _ in pairs}
     ranks = {term: rank_lookup(term) for term in english_terms}
 
     if top_n is not None:
@@ -97,7 +134,7 @@ def build_database(
 
     # Drop German words left with no surviving pair.
     kept_german = {german_word for _, german_word in pairs}
-    german = {word: entry for word, entry in german.items() if word in kept_german}
+    german = {word: gender for word, gender in german.items() if word in kept_german}
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     db_path.unlink(missing_ok=True)
@@ -106,23 +143,24 @@ def build_database(
     try:
         connection.executescript(SCHEMA)
 
-        english_ids = _insert_english(connection, english_terms, ranks)
+        english_pos = {term: english.get(term) for term in english_terms}
+        english_ids = _insert_english(connection, english_terms, ranks, english_pos)
         german_ids = _insert_german(connection, german)
 
         connection.executemany(
             "INSERT OR IGNORE INTO translations (en_id, de_id) VALUES (?, ?)",
             [
-                (english_ids[english], german_ids[german_word])
-                for english, german_word in sorted(pairs)
+                (english_ids[english_term], german_ids[german_word])
+                for english_term, german_word in sorted(pairs)
             ],
         )
 
         connection.executemany(
             "INSERT INTO meta (key, value) VALUES (?, ?)",
             [
-                ("schema_version", "1"),
+                ("schema_version", "2"),
                 ("pair", "en-de"),
-                ("source", "German Wiktionary via cstr/de-wiktionary-extracted"),
+                ("source", "English Wiktionary via kaikki.org (wiktextract)"),
                 ("license", "CC-BY-SA 4.0"),
                 ("top_n", str(top_n) if top_n is not None else "all"),
             ],
@@ -145,25 +183,31 @@ def _insert_english(
     connection: sqlite3.Connection,
     terms: Iterable[str],
     ranks: dict[str, int],
+    parts_of_speech: dict[str, str | None],
 ) -> dict[str, int]:
     ordered = sorted(terms, key=lambda term: (ranks.get(term, UNKNOWN_RANK), term))
     rows = [
-        (index, term, None if ranks.get(term, UNKNOWN_RANK) >= UNKNOWN_RANK else ranks[term])
+        (
+            index,
+            term,
+            parts_of_speech.get(term),
+            None if ranks.get(term, UNKNOWN_RANK) >= UNKNOWN_RANK else ranks[term],
+        )
         for index, term in enumerate(ordered, start=1)
     ]
-    connection.executemany("INSERT INTO words_en (id, text, freq_rank) VALUES (?, ?, ?)", rows)
-    return {term: index for index, term, _ in rows}
+    connection.executemany(
+        "INSERT INTO words_en (id, text, pos, freq_rank) VALUES (?, ?, ?, ?)", rows
+    )
+    return {term: index for index, term, _, _ in rows}
 
 
 def _insert_german(
     connection: sqlite3.Connection,
-    entries: dict[str, Entry],
+    genders: dict[str, str | None],
 ) -> dict[str, int]:
     rows = [
-        (index, word, entries[word].gender, entries[word].pos)
-        for index, word in enumerate(sorted(entries), start=1)
+        (index, word, genders[word])
+        for index, word in enumerate(sorted(genders), start=1)
     ]
-    connection.executemany(
-        "INSERT INTO words_de (id, text, gender, pos) VALUES (?, ?, ?, ?)", rows
-    )
-    return {word: index for index, word, _, _ in rows}
+    connection.executemany("INSERT INTO words_de (id, text, gender) VALUES (?, ?, ?)", rows)
+    return {word: index for index, word, _ in rows}

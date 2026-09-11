@@ -1,0 +1,147 @@
+{
+  "id": "en-de-common",
+  "name": "German: common words",
+  "sourceLanguage": "en",
+  "targetLanguage": "de",
+  "words": [
+    {
+      "source": "like",
+      "answers": [
+        "gefallen",
+        "gern",
+        "gern haben",
+        "mögen"
+      ]
+    },
+    {
+      "source": "time",
+      "answers": [
+        "Zeit"
+      ],
+      "hint": "die … (feminine)"
+    },
+    {
+      "source": "get",
+      "answers": [
+        "besorgen",
+        "erwischen",
+        "holen",
+        "sich schnappen"
+      ]
+    },
+    {
+      "source": "new",
+      "answers": [
+        "neu"
+      ]
+    },
+    {
+      "source": "good",
+      "answers": [
+        "gut"
+      ]
+    },
+    {
+      "source": "know",
+      "answers": [
+        "kennen"
+      ]
+    },
+    {
+      "source": "see",
+      "answers": [
+        "schauen",
+        "sehen"
+      ]
+    },
+    {
+      "source": "think",
+      "answers": [
+        "denken",
+        "finden",
+        "meinen"
+      ]
+    },
+    {
+      "source": "make",
+      "answers": [
+        "machen"
+      ]
+    },
+    {
+      "source": "back",
+      "answers": [
+        "Rücken"
+      ],
+      "hint": "der … (masculine)"
+    },
+    {
+      "source": "go",
+      "answers": [
+        "machen"
+      ]
+    },
+    {
+      "source": "way",
+      "answers": [
+        "Art",
+        "Methode",
+        "Weise"
+      ],
+      "hint": "die … (feminine)"
+    },
+    {
+      "source": "much",
+      "answers": [
+        "viel"
+      ]
+    },
+    {
+      "source": "year",
+      "answers": [
+        "Jahr"
+      ],
+      "hint": "das … (neuter)"
+    },
+    {
+      "source": "work",
+      "answers": [
+        "arbeiten"
+      ]
+    },
+    {
+      "source": "right",
+      "answers": [
+        "ganz"
+      ]
+    },
+    {
+      "source": "day",
+      "answers": [
+        "Tag"
+      ],
+      "hint": "der … (masculine)"
+    },
+    {
+      "source": "take",
+      "answers": [
+        "greifen",
+        "nehmen"
+      ]
+    },
+    {
+      "source": "life",
+      "answers": [
+        "Leben"
+      ],
+      "hint": "das … (neuter)"
+    },
+    {
+      "source": "world",
+      "answers": [
+        "Welt"
+      ],
+      "hint": "die … (feminine)"
+    }
+  ]
+}

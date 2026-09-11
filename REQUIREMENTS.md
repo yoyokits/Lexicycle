@@ -10,7 +10,9 @@ Phases are described in `docs/ROADMAP.md`.
 
 ## Phase 3 — Dictionary in the app
 
-- [ ] **R-301** Decide bundled-SQLite vs bundled-JSON from the `report` numbers, and record the decision in `docs/DATA-SOURCES.md`.
+- [ ] **R-301** Decide bundled-SQLite vs bundled-JSON. *Measured: the whole dictionary is 536 KB, so size does not decide it — choose on query needs.*
+- [ ] **R-308** Improve sense selection so `go → gehen` rather than `machen`. Currently the primary sense is simply Wiktionary's first, which is often not the common meaning.
+- [ ] **R-509** Admit genuine phrasal verbs ("get in", "make up") as prompts while still rejecting phrase fragments ("as in", "what if").
 - [ ] **R-302** Add `sqlite-net-pcl` and a `SqliteVocabularyRepository` in `LexicycleCore` behind the existing `IVocabularySetRepository`.
 - [ ] **R-303** Bundle the generated `lexicycle-dict-en-de.db` as a `MauiAsset` and copy it to `AppDataDirectory` on first run.
 - [ ] **R-304** "Generate session from dictionary": pick N words at random or from a chosen frequency band.
@@ -30,7 +32,8 @@ Phases are described in `docs/ROADMAP.md`.
 - [ ] **R-501** Show grammatical gender and part of speech during practice (data already in `words_de`).
 - [ ] **R-502** Example sentences, sourced from the fuller upstream dataset, as a side table.
 - [ ] **R-503** Frequency-banded practice ("the 500 most common words").
-- [ ] **R-504** Additional language pairs (`en-es`, `de-es`) via the pair-parameterised pipeline.
+- [ ] **R-504** Additional language pairs (`en-es`, `de-es`) via the pair-parameterised pipeline. The English edition carries translations for every language, so this is a filter change rather than a new source.
+- [ ] **R-508** German→English practice sourced from the German edition, where its English-side fragmentation does not matter.
 - [ ] **R-505** User-created and imported vocabulary sets.
 - [ ] **R-506** Session history persisted locally, with per-word progress over time.
 - [ ] **R-507** Spaced repetition scheduling across sessions.

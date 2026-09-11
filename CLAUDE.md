@@ -31,6 +31,10 @@ data/
   entries, not multi-sense disambiguation. See `docs/ROADMAP.md` for what comes later.
 - **English↔German is the only generated pair in v1.** The pipeline is
   pair-parameterised so adding one is config, not redesign.
+- **Dictionary data comes from the *English* Wiktionary edition**, not the German one.
+  The German edition fragments multi-word English translations ("piece of furniture"
+  becomes four entries) and cannot be used. See `docs/DATA-SOURCES.md` before changing
+  the source.
 - **Fully offline.** No backend, no network calls at runtime.
 - **`src/python` is build-time tooling.** Nothing in it ships inside the app.
 - All round/answer logic lives in `LexicycleCore` and must stay UI-free and unit
@@ -84,7 +88,7 @@ cd src/python
 python -m venv .venv && ./.venv/Scripts/python.exe -m pip install -e ".[dev]"
 ./.venv/Scripts/python.exe -m pytest                       # fixture-based, no download
 
-./.venv/Scripts/python.exe -m lexicycle_data download      # ~287 MB, one time
+./.venv/Scripts/python.exe -m lexicycle_data download      # streams ~3.2 GB, one time
 ./.venv/Scripts/python.exe -m lexicycle_data report        # row counts + size per top-N
 ./.venv/Scripts/python.exe -m lexicycle_data build --top-n 5000
 ./.venv/Scripts/python.exe -m lexicycle_data export-json --limit 50

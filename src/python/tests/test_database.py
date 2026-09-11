@@ -15,7 +15,8 @@ from lexicycle_data.model import rows_to_entries
 @pytest.fixture
 def fake_ranks():
     """Deterministic frequencies: 'car' commonest, 'subfamily' rarest."""
-    ranks = {"house": 10, "car": 5, "cat": 20, "subfamily": 9_000, "schadenfreude": 8_000}
+    ranks = {"house": 10, "car": 5, "cat": 20, "run": 3, "sword": 40,
+             "furniture": 60, "subfamily": 9_000}
     return lambda term: ranks.get(term, 10**9)
 
 
@@ -51,16 +52,19 @@ class TestSchema:
 
         assert meta["pair"] == "en-de"
         assert meta["license"] == "CC-BY-SA 4.0"
-        assert meta["schema_version"] == "1"
+        assert meta["schema_version"] == "2"
 
 
 class TestContent:
-    def test_stores_german_gender_and_pos(self, db):
+    def test_stores_german_gender(self, db):
         path, _ = db
-        row = query(path, "SELECT gender, pos FROM words_de WHERE text = 'Haus'")[0]
+        assert query(path, "SELECT gender FROM words_de WHERE text = 'Haus'")[0]["gender"] == "neuter"
+        assert query(path, "SELECT gender FROM words_de WHERE text = 'Wagen'")[0]["gender"] == "masculine"
 
-        assert row["gender"] == "neuter"
-        assert row["pos"] == "noun"
+    def test_stores_the_english_part_of_speech(self, db):
+        path, _ = db
+        assert query(path, "SELECT pos FROM words_en WHERE text = 'house'")[0]["pos"] == "noun"
+        assert query(path, "SELECT pos FROM words_en WHERE text = 'run'")[0]["pos"] == "verb"
 
     def test_one_english_word_can_have_several_german_answers(self, db):
         path, _ = db
@@ -107,9 +111,27 @@ class TestContent:
 
     def test_excluded_rows_never_reach_the_database(self, db):
         path, _ = db
+        english = {row["text"] for row in query(path, "SELECT text FROM words_en")}
         german = {row["text"] for row in query(path, "SELECT text FROM words_de")}
 
-        assert "Ohnegleichen" not in german
+        assert "the" not in english      # function word
+        assert "nonesuch" not in english  # no German translation
+        assert "der" not in german
+
+    def test_only_the_primary_sense_becomes_answers(self, db):
+        path, _ = db
+        answers = {
+            row["text"]
+            for row in query(path, """
+                SELECT de.text FROM words_en en
+                JOIN translations t ON t.en_id = en.id
+                JOIN words_de de ON de.id = t.de_id
+                WHERE en.text = 'run'
+            """)
+        }
+
+        assert answers == {"rennen", "laufen"}
+        assert "umlaufen" not in answers
 
 
 class TestTopN:
@@ -119,7 +141,7 @@ class TestTopN:
 
         english = {row["text"] for row in query(path, "SELECT text FROM words_en")}
 
-        assert english == {"car", "house"}  # ranks 5 and 10
+        assert english == {"run", "car"}  # ranks 3 and 5
         assert stats.english == 2
 
     def test_drops_german_words_left_without_a_pair(self, tmp_path, rows, fake_ranks):
@@ -128,9 +150,9 @@ class TestTopN:
 
         german = {row["text"] for row in query(path, "SELECT text FROM words_de")}
 
-        assert german == {"Haus", "Auto", "Wagen"}
+        assert german == {"rennen", "laufen", "Auto", "Wagen"}
         assert "Katze" not in german
-        assert "Subfamilia" not in german
+        assert "Unterfamilie" not in german
 
     def test_none_keeps_everything(self, db):
         path, stats = db
@@ -206,3 +228,84 @@ class TestExport:
                 continue
             for answer in word["answers"]:
                 assert answer not in hint, f"hint for {word['source']!r} leaks {answer!r}"
+
+
+class TestAnswerOrdering:
+    """German answers are ordered by real-world frequency, not by source order.
+
+    Wiktionary lists dialect forms beside the standard word and not always after it —
+    "love" offers Liab before Liebe — so the first-listed answer cannot be trusted as
+    the one to show the learner.
+    """
+
+    @pytest.fixture
+    def german_ranks(self):
+        # Lower rank == more common, matching frequency.build_rank_lookup.
+        ranks = {"Liebe": 100, "Liab": 9_000, "Zeit": 90, "Ziit": 9_500, "zeid": 9_800}
+        return lambda term: ranks.get(term, 10**9)
+
+    def _entry(self, word, german):
+        from lexicycle_data.model import Entry
+
+        return Entry(word=word, pos="noun", german=tuple(german))
+
+    def test_the_common_word_becomes_the_primary_answer(self, tmp_path, german_ranks):
+        path = tmp_path / "d.db"
+        build_database(
+            [self._entry("love", [("Liab", None), ("Liebe", "feminine")])],
+            path,
+            top_n=None,
+            german_rank_lookup=german_ranks,
+        )
+
+        rows = query(
+            path,
+            """
+            SELECT de.text FROM words_en en
+            JOIN translations t ON t.en_id = en.id
+            JOIN words_de de ON de.id = t.de_id
+            WHERE en.text = 'love'
+            ORDER BY de.id
+            """,
+        )
+
+        assert [row["text"] for row in rows] == ["Liebe"]
+
+    def test_far_rarer_variants_are_dropped(self, tmp_path, german_ranks):
+        path = tmp_path / "d.db"
+        build_database(
+            [self._entry("time", [("Zeit", "feminine"), ("Ziit", None), ("zeid", None)])],
+            path,
+            top_n=None,
+            german_rank_lookup=german_ranks,
+        )
+
+        german = {row["text"] for row in query(path, "SELECT text FROM words_de")}
+
+        assert german == {"Zeit"}
+
+    def test_comparably_common_answers_are_all_kept(self, tmp_path):
+        path = tmp_path / "d.db"
+        ranks = {"Auto": 100, "Wagen": 400}
+        build_database(
+            [self._entry("car", [("Auto", "neuter"), ("Wagen", "masculine")])],
+            path,
+            top_n=None,
+            german_rank_lookup=lambda t: ranks.get(t, 10**9),
+        )
+
+        german = {row["text"] for row in query(path, "SELECT text FROM words_de")}
+
+        assert german == {"Auto", "Wagen"}
+
+    def test_caps_the_number_of_answers(self, tmp_path):
+        path = tmp_path / "d.db"
+        many = [(f"Wort{i}", None) for i in range(10)]
+        build_database(
+            [self._entry("word", many)],
+            path,
+            top_n=None,
+            german_rank_lookup=lambda _t: 100,
+        )
+
+        assert len(query(path, "SELECT id FROM words_de")) == 4

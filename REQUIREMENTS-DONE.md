@@ -36,11 +36,12 @@ Completed and verified requirements, moved here from `REQUIREMENTS.md`.
 ## Phase 2 — Python data pipeline · 2026-09-10
 
 - [x] **R-201** `src/python` package with a `pyproject.toml`, venv instructions and a step-based CLI (`python -m lexicycle_data <step>`).
-- [x] **R-202** Upstream source selected and documented: `cstr/de-wiktionary-extracted` parquet (287 MB) rather than `de-wiktionary-sqlite-full` (4.45 GB) — same content, ~15× smaller. See `docs/DATA-SOURCES.md`.
-- [x] **R-203** `download` step fetching the parquet files into `data/raw/`.
-- [x] **R-204** Extraction rules: German lemma, part of speech, gender from `tags`, English terms from `translations` where `lang_code == "en"`; rejects uncertain translations, glosses and multi-word explanations.
-- [x] **R-205** Three-table schema (`words_en`, `words_de`, `translations`) plus a `meta` table recording source, licence and cut-off.
+- [x] **R-202** Upstream source selected, tested against real data, and documented. The German edition (`cstr/de-wiktionary-extracted`) was tried first and **rejected**: wiktextract fragments multi-word English translations there ("piece of furniture" → `item`, `piece`, `of`, `furniture`), which no filter can undo. The source is now the **English** Wiktionary edition via kaikki.org. See `docs/DATA-SOURCES.md`.
+- [x] **R-203** `download` step streaming the ~3.2 GB extract and distilling it to a small gzipped file, so extraction can be re-tuned offline. Verifies the transferred byte count against `Content-Length` and resumes with HTTP Range on a dropped connection — a truncated stream is otherwise indistinguishable from a complete one, since the JSON stays valid and there is simply less of it.
+- [x] **R-210** TLS verification via `truststore` (the OS certificate store), needed wherever antivirus or a proxy inspects HTTPS — Avast on this machine. Includes a clear CLI error pointing at the fix.
+- [x] **R-204** Extraction rules: English lemma, content parts of speech only, primary-sense translations only, gender from each translation's `tags`; rejects obsolete/archaic tags, glosses and multi-word explanations.
+- [x] **R-205** Three-table schema (`words_en` with `pos`, `words_de` with `gender`, `translations`) plus a `meta` table recording source, licence and cut-off. `schema_version` 2.
 - [x] **R-206** `wordfreq`-based English frequency ranking, driving the top-N cut.
 - [x] **R-207** `report` step printing row counts and on-disk size for N = 1k / 5k / 10k / 50k / all.
 - [x] **R-208** `export-json` step emitting a `VocabularySet`-shaped file the app can consume before any on-device SQLite work.
-- [x] **R-209** Fixture-based pytest suite (44 tests) covering extraction, schema, de-duplication, the top-N cut and the exporter — no download required.
+- [x] **R-209** Fixture-based pytest suite (57 tests) covering extraction, primary-sense selection, schema, de-duplication, the top-N cut and the exporter — no download required.
