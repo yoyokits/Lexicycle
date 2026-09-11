@@ -3,7 +3,16 @@ using LexicycleCore.Models;
 namespace LexicycleCore.Dictionary;
 
 /// <summary>One dictionary entry, resolved into a drillable question.</summary>
-public sealed record DictionaryWord(int Id, string Source, IReadOnlyList<string> Answers, string? Hint)
+/// <param name="FreqRank">
+/// 1 is the most common English word. Null for the unranked tail. Carried through so a
+/// session can be presented most-common-first, which is the order worth learning in.
+/// </param>
+public sealed record DictionaryWord(
+    int Id,
+    string Source,
+    IReadOnlyList<string> Answers,
+    string? Hint,
+    int? FreqRank = null)
 {
     public WordPair ToWordPair() => new(Source, Answers, Hint);
 }

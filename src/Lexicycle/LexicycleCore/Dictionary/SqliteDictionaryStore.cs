@@ -36,6 +36,7 @@ public sealed class SqliteDictionaryStore : IDictionaryStore, IAsyncDisposable
         public string Source { get; set; } = string.Empty;
         public string Answer { get; set; } = string.Empty;
         public string? Gender { get; set; }
+        public int? FreqRank { get; set; }
     }
 
     public async Task<int> CountAsync(CancellationToken cancellationToken = default)
@@ -78,7 +79,8 @@ public sealed class SqliteDictionaryStore : IDictionaryStore, IAsyncDisposable
         // One row per acceptable answer; grouped back into words below.
         var rows = await _connection.QueryAsync<PairRow>(
             $"""
-             SELECT en.id AS Id, en.text AS Source, de.text AS Answer, de.gender AS Gender
+             SELECT en.id AS Id, en.text AS Source, de.text AS Answer, de.gender AS Gender,
+                    en.freq_rank AS FreqRank
              FROM words_en en
              JOIN translations t ON t.en_id = en.id
              JOIN words_de de ON de.id = t.de_id
@@ -99,7 +101,8 @@ public sealed class SqliteDictionaryStore : IDictionaryStore, IAsyncDisposable
         var answers = group.Select(row => row.Answer).ToList();
         var first = group.First();
 
-        return new DictionaryWord(group.Key, first.Source, answers, BuildHint(first.Gender));
+        return new DictionaryWord(
+            group.Key, first.Source, answers, BuildHint(first.Gender), first.FreqRank);
     }
 
     /// <summary>

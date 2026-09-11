@@ -21,4 +21,27 @@ public sealed record WordProgress(
     int LastSession)
 {
     public static WordProgress New(int wordId) => new(wordId, 0, 0, 0, 0, 0);
+
+    /// <summary>
+    /// Wrong answers given for this word, across every round of every session.
+    /// This is what drives the revision weighting in <see cref="SessionComposer"/>.
+    /// </summary>
+    public int TimesAnsweredWrong => TimesMissed;
+
+    /// <summary>
+    /// Right answers given for this word. A session only ends once every one of its words
+    /// has been answered correctly, so this is one per session the word appeared in —
+    /// which is why it equals <see cref="TimesSeen"/> rather than being counted
+    /// separately. <see cref="TimesCorrect"/> is the stricter figure: sessions where the
+    /// word was right *first try*, with no misses at all.
+    /// </summary>
+    public int TimesAnsweredRight => TimesSeen;
+
+    /// <summary>
+    /// Share of answers that were right, 0-1. Null for a word never yet asked, so that
+    /// "no data" is distinguishable from "always wrong".
+    /// </summary>
+    public double? Accuracy => TimesSeen == 0
+        ? null
+        : (double)TimesAnsweredRight / (TimesAnsweredRight + TimesAnsweredWrong);
 }

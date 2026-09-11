@@ -72,45 +72,57 @@ list, and consecutive sessions ask different things.
 deliberately — the bundled JSON, and later an OCR'd page — go straight to the engine with
 exactly the words they were given, because rotating those away would be wrong.
 
-**Word order is chosen per session, not stored.** `SessionViewModel` calls
-`VocabularySet.Shuffled()` on every path, generated and fixed alike. Sets have a natural
-stored order — file order for the bundled JSON, frequency order for a generated session —
-and asking them in it made every visit to a fixed set identical: "German basics" opened
-`house dog cat car` every single time, which reads as "it keeps asking the same
-questions" even where the rotation is working correctly. Ordering is a property of a
-session, not of a set, so it lives at the point the session starts rather than in
-`SessionEngine`, whose job is round mechanics.
+**Word order depends on whether frequency is known.**
+
+- A *generated* session is presented **most common first**, which is the order worth
+  learning in. Its membership changes every session, so a deterministic order never feels
+  repetitive.
+- A *fixed* set has no frequency data and identical membership every visit, so
+  `SessionViewModel` calls `VocabularySet.Shuffled()` on it. Without that, "German basics"
+  opened `house dog cat car` every single time, which reads as "it keeps asking the same
+  questions" even where selection is working correctly.
+
+Ordering is a property of a session, not of a set, so it is applied where the session
+starts rather than inside `SessionEngine`, whose job is round mechanics. `Shuffled`
+returns a new set, so the repository's cached instances are never mutated.
 
 A fixed set is still asked in full: shuffling changes the order, not the membership. A
 12-word set drilled 12 at a time necessarily contains the same 12 words each visit.
 
-`ReviewSchedule` is a Leitner scheme counted in **sessions, not days**, so someone
-practising twice a week gets the same sequence as someone practising twice a day:
+### How a session is chosen
 
-| Box | Meaning | Returns after |
-| --- | --- | --- |
-| 0 | being learned, or just missed | 2 sessions (`RelearnDelay`) |
-| 1-4 | answered correctly N times | 5, 12, 30, 90 sessions |
-| 5 | mastered | never |
+`SessionComposer` applies four rules, in priority order:
 
-A miss drops a word straight back to box 0 — it needs relearning, not a longer wait. The
-first correct interval is deliberately long: variety is the point, so a word answered
-correctly should stay away for a while.
+1. **At least 80% new** (`MinNewShare`). A ten-word session is eight words the learner has
+   never been asked, taken most-common-first from the frequency-ranked dictionary.
+2. **The remainder is revision, weighted by failures.** A word's chance of being drawn is
+   proportional to how often it has been answered *wrong*, plus one.
+3. **Sampled, not sorted.** Revision is drawn by weighted random sampling rather than by
+   taking the worst few. Taking the worst outright would serve the same handful of hard
+   words every session until they were finally learned — which is exactly the "it keeps
+   asking me the same things" complaint. Weighting makes them likely, not certain.
+4. **Never twice running.** Nothing asked in the immediately preceding session is offered,
+   whatever its failure count. This one is absolute and overrides the weighting.
 
-**Box 0 waits two sessions, not one.** At one, a learner missing a few words per session
-was served those same words in the very next session, every session: the schedule demoted
-them to box 0, and box 0 was due immediately. Getting one wrong effectively pinned it to
-the rotation until it was finally answered cleanly.
+The `+1` weight floor matters: a word that has never been missed still has a small chance
+of returning, so revision does not degenerate into drilling only the failures.
 
-`SessionComposer` enforces the same rule as a hard floor, independently of the delays: a
-word asked in the immediately preceding session is never offered, whatever
-`DueAtSession` says. That is the property a learner actually notices, so it does not
-depend on the delay table staying tuned — and it holds on the exhausted-dictionary path
-too, where a shorter session is preferred over one that repeats what was just asked.
+Consequences worth knowing:
 
-`SessionComposer` also caps revision at half a session so new material keeps arriving,
-then lifts that cap once the dictionary runs out of unseen words. If nothing is new and
-nothing is available, it returns an empty plan and the UI says so rather than repeating.
+- **Small sessions never revise.** `ceil(size × 0.8)` leaves no room below size 5, so a
+  four-word session is entirely new. `PracticeSessionFactory.DefaultSize` is 10, which
+  gives 8 new + 2 review.
+- **An exhausted dictionary yields a pure-revision session** rather than an empty one; the
+  80% floor cannot be met, so revision takes the whole session. Rule 4 still applies.
+
+### Mastery
+
+`ReviewSchedule` tracks how well a word is known as a Leitner box: a correct answer
+promotes one box, a miss drops it to 0, and past the last box it counts as mastered. This
+is a *statistic* — it records progress but does not decide what a session asks. An earlier
+version did drive selection through fixed per-box intervals; that was removed rather than
+left in place, because two scheduling models with only one of them live is a trap for the
+next reader.
 
 Two database files, deliberately separate:
 

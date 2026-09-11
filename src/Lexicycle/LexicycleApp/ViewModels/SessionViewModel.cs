@@ -129,9 +129,11 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
         IsLoading = true;
         ErrorMessage = null;
 
+        var isGenerated = setId == PracticeSessionFactory.GeneratedSetId;
+
         try
         {
-            var set = setId == PracticeSessionFactory.GeneratedSetId
+            var set = isGenerated
                 ? await StartGeneratedSessionAsync()
                 : await _repository.GetByIdAsync(setId);
 
@@ -149,10 +151,14 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
 
             SetName = set.Name;
 
-            // Order is chosen per session, not stored. Without this a fixed set opens with
-            // the same word every time, which reads as "it is asking me the same questions"
-            // even when the rotation is working.
-            _engine = new SessionEngine(set.Shuffled(), _settings.CreateComparer());
+            // A generated session is already ordered most-common-first, which is the order
+            // worth learning in, and its membership changes every session so a fixed order
+            // never feels repetitive. A fixed set has no frequency data and identical
+            // membership every visit, so its order is randomised instead — otherwise
+            // "German basics" opens on the same word forever.
+            _engine = new SessionEngine(
+                isGenerated ? set : set.Shuffled(),
+                _settings.CreateComparer());
             RefreshFromEngine();
         }
         catch (Exception ex)

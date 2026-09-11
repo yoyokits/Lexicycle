@@ -64,15 +64,22 @@ public sealed class PracticeSessionFactory
             .GetWordsAsync(plan.AllWordIds, cancellationToken)
             .ConfigureAwait(false);
 
+        // Most common first, so the words worth knowing come before the obscure ones.
+        // Unranked words sort last; they are the rare tail of the dictionary.
+        var ordered = words
+            .OrderBy(word => word.FreqRank ?? int.MaxValue)
+            .ThenBy(word => word.Source, StringComparer.Ordinal)
+            .ToList();
+
         var set = new VocabularySet(
             GeneratedSetId,
             $"Practice · session {sessionNumber}",
             "en",
             "de",
-            words.Select(word => word.ToWordPair()).ToList());
+            ordered.Select(word => word.ToWordPair()).ToList());
 
         // The engine works in WordPairs; this maps its summary back to dictionary ids.
-        var idsBySource = words
+        var idsBySource = ordered
             .GroupBy(word => word.Source)
             .ToDictionary(group => group.Key, group => group.First().Id);
 
