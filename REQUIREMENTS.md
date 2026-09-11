@@ -36,7 +36,6 @@ Known limitations of the generated dictionary, detailed in `docs/DATA-SOURCES.md
 
 - [ ] **R-501** Show grammatical gender and part of speech during practice (gender is in `words_de`, part of speech in `words_en`).
 - [ ] **R-502** Example sentences, sourced from the fuller upstream dataset, as a side table.
-- [ ] **R-503** Frequency-banded practice ("the 500 most common words").
 - [ ] **R-504** Additional language pairs (`en-es`, `de-es`) via the pair-parameterised pipeline. The English edition carries translations for every language, so this is a filter change rather than a new source.
 - [ ] **R-508** German→English practice sourced from the German edition, where its English-side fragmentation does not matter.
 - [ ] **R-505** User-created and imported vocabulary sets.

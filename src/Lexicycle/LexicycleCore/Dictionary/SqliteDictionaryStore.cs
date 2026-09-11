@@ -46,6 +46,7 @@ public sealed class SqliteDictionaryStore : IDictionaryStore, IAsyncDisposable
     public async Task<IReadOnlyList<int>> GetUnseenIdsAsync(
         IReadOnlyCollection<int> excludeIds,
         int limit,
+        FrequencyBand? band = null,
         CancellationToken cancellationToken = default)
     {
         if (limit <= 0)
@@ -54,17 +55,53 @@ public sealed class SqliteDictionaryStore : IDictionaryStore, IAsyncDisposable
         }
 
         // Unranked words are the rare tail of the dictionary; they make poor questions.
-        var sql = "SELECT id FROM words_en WHERE freq_rank IS NOT NULL";
+        var sql = $"SELECT id FROM ({BandWindow(band)})";
 
         if (excludeIds.Count > 0)
         {
-            sql += $" AND id NOT IN ({string.Join(",", excludeIds)})";
+            sql += $" WHERE id NOT IN ({string.Join(",", excludeIds)})";
         }
 
-        sql += " ORDER BY freq_rank LIMIT ?";
+        sql += " LIMIT ?";
 
         var rows = await _connection.QueryAsync<IdRow>(sql, limit).ConfigureAwait(false);
         return rows.Select(row => row.Id).ToList();
+    }
+
+    public async Task<int> CountInBandAsync(
+        FrequencyBand band,
+        CancellationToken cancellationToken = default)
+        => await _connection
+            .ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM ({BandWindow(band)})")
+            .ConfigureAwait(false);
+
+    /// <summary>
+    /// The band's words, most common first, as a subquery.
+    ///
+    /// A band is a positional window, so the ordering is applied first and the slice taken
+    /// from it — filtering out already-seen words before slicing would shift the window
+    /// and quietly change which words belong to the band.
+    ///
+    /// <c>id</c> breaks ties: <c>freq_rank</c> holds a scaled Zipf score with only a few
+    /// hundred distinct values, so without a tiebreak the ordering is not stable and a
+    /// band's membership could shift between queries.
+    ///
+    /// Offsets come from the band definitions, never from user input, so they are inlined
+    /// — as the exclusion list above is.
+    /// </summary>
+    private static string BandWindow(FrequencyBand? band)
+    {
+        const string Ordered =
+            "SELECT id FROM words_en WHERE freq_rank IS NOT NULL ORDER BY freq_rank, id";
+
+        if (band is null)
+        {
+            return Ordered;
+        }
+
+        // SQLite requires a LIMIT before OFFSET; -1 means "no limit".
+        var size = band.Size?.ToString() ?? "-1";
+        return $"{Ordered} LIMIT {size} OFFSET {band.Skip}";
     }
 
     public async Task<IReadOnlyList<DictionaryWord>> GetWordsAsync(

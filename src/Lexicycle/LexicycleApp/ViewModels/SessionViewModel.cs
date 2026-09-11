@@ -162,12 +162,13 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
         _setId = setId;
         _fixedSet = null;
 
-        var isGenerated = setId == PracticeSessionFactory.GeneratedSetId;
+        var band = FrequencyBand.ById(setId);
+        var isGenerated = setId == PracticeSessionFactory.GeneratedSetId || band is not null;
 
         try
         {
             var set = isGenerated
-                ? await StartGeneratedSessionAsync()
+                ? await StartGeneratedSessionAsync(band)
                 : await StartFixedSetSessionAsync(setId);
 
             if (set is null)
@@ -187,9 +188,15 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
                         "Start it again to practise them a second time.";
                     CanRestartSet = true;
                 }
+                else if (band is not null)
+                {
+                    ErrorMessage =
+                        $"You have learned every word in {band.Name} — {band.RangeText}. " +
+                        "Move on to the next band.";
+                }
                 else
                 {
-                    ErrorMessage = "Nothing new to practise right now — come back after a break.";
+                    ErrorMessage = "You have been through the whole dictionary. Nothing left to ask.";
                 }
 
                 return;
@@ -219,13 +226,13 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     /// Draws the next batch of words from the dictionary, skipping anything practised
     /// recently so consecutive sessions differ.
     /// </summary>
-    private async Task<VocabularySet> StartGeneratedSessionAsync()
+    private async Task<VocabularySet> StartGeneratedSessionAsync(FrequencyBand? band)
     {
         _factory = new PracticeSessionFactory(
             await _databases.GetDictionaryAsync(),
             _databases.Progress);
 
-        _practice = await _factory.CreateAsync();
+        _practice = await _factory.CreateAsync(band: band);
         return _practice.Set;
     }
 

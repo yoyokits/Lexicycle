@@ -46,8 +46,15 @@ public sealed class PracticeSessionFactory
     /// the session, which is deliberate: the counter paces the review schedule, and an
     /// abandoned session should still push revision forward rather than stall it.
     /// </summary>
+    /// <param name="band">
+    /// Restricts the draw to one frequency band. Progress stays in the single dictionary
+    /// scope whichever band is used, so a word learned under "Basics" is not asked again
+    /// under "Practice" — the bands are views over one body of vocabulary, not separate
+    /// courses.
+    /// </param>
     public async Task<PracticeSession> CreateAsync(
         int size = DefaultSize,
+        FrequencyBand? band = null,
         CancellationToken cancellationToken = default)
     {
         var seen = await _progress
@@ -60,7 +67,7 @@ public sealed class PracticeSessionFactory
         // Only words never asked before are candidates for the "new" half.
         var alreadySeen = seen.Select(progress => progress.WordId).ToHashSet();
         var unseen = await _dictionary
-            .GetUnseenIdsAsync(alreadySeen, size, cancellationToken)
+            .GetUnseenIdsAsync(alreadySeen, size, band, cancellationToken)
             .ConfigureAwait(false);
 
         var plan = _composer.Compose(sessionNumber, size, seen, unseen);
@@ -76,8 +83,8 @@ public sealed class PracticeSessionFactory
             .ToList();
 
         var set = new VocabularySet(
-            GeneratedSetId,
-            $"Practice · session {sessionNumber}",
+            band?.Id ?? GeneratedSetId,
+            band is null ? $"Practice · session {sessionNumber}" : band.Name,
             "en",
             "de",
             ordered.Select(word => word.ToWordPair()).ToList());

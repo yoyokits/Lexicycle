@@ -30,10 +30,18 @@ public interface IDictionaryStore
     /// Word ids never yet practised, most frequent first, so a learner meets useful
     /// vocabulary before obscure vocabulary.
     /// </summary>
+    /// <param name="band">
+    /// Restricts the draw to one slice of the frequency ranking. Null draws from the whole
+    /// dictionary.
+    /// </param>
     Task<IReadOnlyList<int>> GetUnseenIdsAsync(
         IReadOnlyCollection<int> excludeIds,
         int limit,
+        FrequencyBand? band = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>How many drillable words fall inside one frequency band.</summary>
+    Task<int> CountInBandAsync(FrequencyBand band, CancellationToken cancellationToken = default);
 
     /// <summary>Resolves ids into questions, preserving the order asked for.</summary>
     Task<IReadOnlyList<DictionaryWord>> GetWordsAsync(

@@ -50,27 +50,27 @@
             <Label
                 Margin="0,8,0,0"
                 Style="{StaticResource SubtleLabel}"
-                Text="Or pick a fixed set:" />
+                Text="Or work through a band of the dictionary:" />
         </VerticalStackLayout>
 
         <CollectionView
             Grid.Row="1"
-            ItemsSource="{Binding Sets}"
+            ItemsSource="{Binding Bands}"
             SelectionMode="None">
 
             <CollectionView.EmptyView>
                 <Label
                     HorizontalTextAlignment="Center"
                     Style="{StaticResource SubtleLabel}"
-                    Text="No vocabulary sets available." />
+                    Text="No vocabulary available." />
             </CollectionView.EmptyView>
 
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="models:VocabularySet">
+                <DataTemplate x:DataType="vm:HomeViewModel+BandRow">
                     <Border Margin="0,0,0,10" Style="{StaticResource Card}">
                         <Border.GestureRecognizers>
                             <TapGestureRecognizer
-                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:HomeViewModel}}, Path=StartCommand}"
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:HomeViewModel}}, Path=StartBandCommand}"
                                 CommandParameter="{Binding .}" />
                         </Border.GestureRecognizers>
 
@@ -86,7 +86,7 @@
                                 Grid.Row="1"
                                 Grid.Column="0"
                                 Style="{StaticResource SubtleLabel}"
-                                Text="{Binding WordCount, StringFormat='{0} words'}" />
+                                Text="{Binding Subtitle}" />
 
                             <Label
                                 Grid.Row="0"
@@ -94,7 +94,7 @@
                                 Grid.Column="1"
                                 FontAttributes="Bold"
                                 FontSize="14"
-                                Text="{Binding LanguagePair}"
+                                Text="en → de"
                                 TextColor="{StaticResource Primary}"
                                 VerticalOptions="Center" />
                         </Grid>

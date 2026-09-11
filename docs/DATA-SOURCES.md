@@ -102,8 +102,18 @@ and technical entries. Ranking the English side by real-world frequency is what 
 dump into a usable beginner vocabulary.
 
 `wordfreq`'s Zipf scale (~1 vanishingly rare, ~8 commonest) is inverted into an integer
-rank. Multi-word terms take the rank of their rarest word, so "ice cream" ranks by
+score. Multi-word terms take the score of their rarest word, so "ice cream" ranks by
 "cream".
+
+> **`freq_rank` is not a rank.** The column name is a lie inherited from an early draft.
+> `frequency.py` stores `round((8 − zipf) × 1000)`, so on the shipped dictionary it runs
+> from **1,590 to 6,990** with only about **480 distinct values across 3,545 words** —
+> heavily tied, never 1..N. Lower still means more common, so `ORDER BY freq_rank` is
+> correct, but *filtering* on it as though it were an ordinal is not: `freq_rank BETWEEN 1
+> AND 1000` matches nothing at all. Anything positional — "the 1,000 most common words" —
+> must use `ORDER BY freq_rank, id` with `LIMIT`/`OFFSET`, and needs the `id` tiebreak
+> because the ties would otherwise make the ordering unstable. `FrequencyBand` does this;
+> see `SqliteDictionaryStore.BandWindow`.
 
 ## Generated schema
 

@@ -72,18 +72,31 @@ Two factories build sessions, and **both** consult progress:
 
 | Factory | Source | Session size |
 | --- | --- | --- |
-| `PracticeSessionFactory` | the generated dictionary | `DefaultSize` (10) |
-| `FixedSetSessionFactory` | a bundled JSON set, later an OCR'd page | `SizeFor(count)` |
+| `PracticeSessionFactory` | the generated dictionary, whole or one band | `DefaultSize` (10) |
+| `FixedSetSessionFactory` | an OCR'd page (R-404) | `SizeFor(count)` |
 
-Fixed sets were originally drilled whole on every visit, on the reasoning that their
-words had been chosen deliberately. That was wrong: opening "German basics" twice asked
-the identical twelve questions, forever. A set is a pool to draw from, not a script to
-replay.
+### Bands, not starter sets
 
-`FixedSetSessionFactory.SizeFor` takes **half the set**, capped at `DefaultSize`. Never
-more: a session using the whole set cannot avoid repeating it, and one using most of it
-leaves too little for the next visit — twelve words asked ten at a time gives a follow-up
-of two. Halving guarantees two disjoint sessions back to back.
+The home screen offers **Practice** over the whole dictionary, plus `FrequencyBand.All`:
+Basics (the 1,000 most common), Common words (the next 1,000), Wider vocabulary (the
+rest).
+
+These replaced three hand-written JSON sets of **twelve words each**. Those were written
+in Phase 1, before the dictionary existed, and were never revisited once it did — a
+learner exhausted one in two sittings, which is what made the repetition complaints so
+acute. They are deleted; nothing ships as JSON now.
+
+A band is a **positional window** over the frequency ordering, not a range of `freq_rank`
+values — that column holds a scaled Zipf score, not an ordinal, and slicing on its value
+put every word in the last band. See `docs/DATA-SOURCES.md`.
+
+Bands share the single `dictionary` progress scope, so they are views over one body of
+vocabulary rather than separate courses: a word learned under Basics is never offered as
+*new* under Practice.
+
+`FixedSetSessionFactory` remains for externally supplied word lists. Its `SizeFor` takes
+**half the set**, capped at `DefaultSize`, so a set always yields at least two disjoint
+sessions before it is exhausted.
 
 ### Scoping
 

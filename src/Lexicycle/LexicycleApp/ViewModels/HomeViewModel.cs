@@ -12,7 +12,6 @@ namespace LexicycleApp.ViewModels;
 /// <summary>Lists the available vocabulary sets and starts a session.</summary>
 public sealed partial class HomeViewModel : ObservableObject
 {
-    private readonly IVocabularySetRepository _repository;
     private readonly AppSettings _settings;
     private readonly AppDatabases _databases;
 
@@ -39,17 +38,19 @@ public sealed partial class HomeViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasMilestone;
 
-    public HomeViewModel(
-        IVocabularySetRepository repository,
-        AppSettings settings,
-        AppDatabases databases)
+    public HomeViewModel(AppSettings settings, AppDatabases databases)
     {
-        _repository = repository;
         _settings = settings;
         _databases = databases;
     }
 
-    public ObservableCollection<VocabularySet> Sets { get; } = [];
+    /// <summary>One frequency band on the home screen.</summary>
+    public sealed record BandRow(FrequencyBand Band, string Subtitle)
+    {
+        public string Name => Band.Name;
+    }
+
+    public ObservableCollection<BandRow> Bands { get; } = [];
 
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 
@@ -88,15 +89,6 @@ public sealed partial class HomeViewModel : ObservableObject
 
         try
         {
-            if (Sets.Count == 0)
-            {
-                var sets = await _repository.GetAllAsync();
-                foreach (var set in sets)
-                {
-                    Sets.Add(set);
-                }
-            }
-
             await RefreshProgressAsync();
         }
         catch (Exception ex)
@@ -125,13 +117,38 @@ public sealed partial class HomeViewModel : ObservableObject
 
             var learned = await _databases.Progress.CountLearnedAsync(ProgressScope.Dictionary);
             ShowMilestone(Milestones.Describe(learned));
+
+            await RefreshBandsAsync(dictionary);
         }
         catch (Exception ex)
         {
-            // The bundled sets still work without the dictionary, so this is not fatal.
             System.Diagnostics.Debug.WriteLine($"Dictionary unavailable: {ex}");
-            PracticeSubtitle = "Draws new words each time";
+            ErrorMessage = $"Could not open the dictionary: {ex.Message}";
+            PracticeSubtitle = "Unavailable";
             HasMilestone = false;
+        }
+    }
+
+    /// <summary>
+    /// Lists the frequency bands with how many words each holds. Sizes come from the
+    /// dictionary rather than being hard-coded, so regenerating it keeps them honest.
+    /// </summary>
+    private async Task RefreshBandsAsync(IDictionaryStore dictionary)
+    {
+        if (Bands.Count > 0)
+        {
+            return;
+        }
+
+        foreach (var band in FrequencyBand.All)
+        {
+            var count = await dictionary.CountInBandAsync(band);
+            if (count == 0)
+            {
+                continue;
+            }
+
+            Bands.Add(new BandRow(band, $"{count:N0} words · {band.RangeText}"));
         }
     }
 
@@ -152,8 +169,8 @@ public sealed partial class HomeViewModel : ObservableObject
         => Shell.Current.GoToAsync($"{Routes.Session}?setId={PracticeSessionFactory.GeneratedSetId}");
 
     [RelayCommand]
-    private static Task StartAsync(VocabularySet? set)
-        => set is null
+    private static Task StartBandAsync(BandRow? row)
+        => row is null
             ? Task.CompletedTask
-            : Shell.Current.GoToAsync($"{Routes.Session}?setId={Uri.EscapeDataString(set.Id)}");
+            : Shell.Current.GoToAsync($"{Routes.Session}?setId={Uri.EscapeDataString(row.Band.Id)}");
 }
