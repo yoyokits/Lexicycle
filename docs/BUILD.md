@@ -45,8 +45,13 @@ python -m venv .venv && ./.venv/Scripts/python.exe -m pip install -e ".[dev]"
 ./.venv/Scripts/python.exe -m lexicycle_data download      # streams ~3.2 GB, one time
 ./.venv/Scripts/python.exe -m lexicycle_data report        # row counts + size per top-N
 ./.venv/Scripts/python.exe -m lexicycle_data build --top-n 0
-./.venv/Scripts/python.exe -m lexicycle_data export-json --limit 50
+./.venv/Scripts/python.exe -m lexicycle_data export-json --limit 50   # inspection only
 ```
+
+`export-json` no longer feeds the app — nothing ships as JSON since the starter sets were
+deleted. It stays because dumping fifty pairs and reading them is the fastest way to judge
+whether an extraction change improved or wrecked the data, which row counts cannot tell
+you.
 
 The tests run against a small in-code fixture shaped like the real dataset, so the whole
 transform is verifiable without the download. If `download` fails with
@@ -58,6 +63,10 @@ After regenerating the dictionary, copy it into the app and bump `DictionaryVers
 ```bash
 cp data/dist/lexicycle-dict-en-de.db src/Lexicycle/LexicycleApp/Resources/Raw/
 ```
+
+Check `FrequencyBand.All` still makes sense afterwards. The bands are positional windows,
+so they resize themselves, but a much smaller dictionary could leave a band empty — the
+home screen hides any band with no words rather than showing a dead row.
 
 ## Verification traps
 

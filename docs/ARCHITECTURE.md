@@ -12,8 +12,13 @@ LexicycleApp  (net10.0-android, MAUI)
 LexicycleCore  (net10.0, no MAUI reference)
    Models/        WordPair, VocabularySet
    Session/       AnswerComparer, SessionEngine, SessionSummary
+   Dictionary/    IDictionaryStore, FrequencyBand, the two session factories
+   Progress/      IProgressStore, SessionComposer, ReviewSchedule, Milestones
    Services/      IVocabularySetRepository, IAssetProvider, bundled-JSON implementation
 ```
+
+Nothing ships as JSON any more, but the repository seam stays: OCR (R-404) and imported
+sets (R-505) both produce word lists from outside the dictionary.
 
 `LexicycleCore` has no MAUI dependency at all. That is what lets `LexicycleCore.Tests`
 reference it directly — an xUnit project cannot cleanly reference a multi-targeted MAUI
@@ -102,31 +107,35 @@ sessions before it is exhausted.
 
 Word ids are unique only within a pool: the dictionary numbers words from `words_en`, a
 fixed set numbers its own words by position. `ProgressScope` keeps them apart —
-`"dictionary"` or `"set:<id>"` — and every progress query is scoped.
+`"dictionary"` or `"set:<id>"` — and every progress query is scoped. All three bands share
+the `dictionary` scope, because they are slices of one pool.
 
 **Session numbering is per-scope too.** A global counter would let dictionary practice
-advance German basics' rotation, so its no-repeat rule would be satisfied by sessions the
+advance a fixed set's rotation, so its no-repeat rule would be satisfied by sessions the
 learner never played there.
 
-The milestone bar counts the dictionary scope only. A twelve-word bundled set is not
-progress through a 3,545-word dictionary, so finishing one raises no milestone.
+The milestone bar counts the dictionary scope only, so finishing an OCR'd page raises no
+milestone — it is not progress through the dictionary.
 
 **Word order depends on whether frequency is known.**
 
-- A *generated* session is presented **most common first**, which is the order worth
+- A *dictionary* session is presented **most common first**, which is the order worth
   learning in. Its membership changes every session, so a deterministic order never feels
   repetitive.
-- A *fixed* set has no frequency data and identical membership every visit, so
-  `SessionViewModel` calls `VocabularySet.Shuffled()` on it. Without that, "German basics"
-  opened `house dog cat car` every single time, which reads as "it keeps asking the same
-  questions" even where selection is working correctly.
+- A *fixed* set has no frequency data, so `SessionViewModel` calls
+  `VocabularySet.Shuffled()` on it.
 
 Ordering is a property of a session, not of a set, so it is applied where the session
 starts rather than inside `SessionEngine`, whose job is round mechanics. `Shuffled`
 returns a new set, so the repository's cached instances are never mutated.
 
-A fixed set is still asked in full: shuffling changes the order, not the membership. A
-12-word set drilled 12 at a time necessarily contains the same 12 words each visit.
+### Running out
+
+Because nothing is ever replayed, every pool eventually empties. The dictionary is ~350
+sessions away from that; a small fixed set reaches it in a couple of visits. When a fixed
+set empties, `SessionViewModel` says so and offers **Start this set again**, which calls
+`IProgressStore.ResetScopeAsync` for that scope alone. An emptied band points the learner
+at the next band instead.
 
 ### How a session is chosen
 

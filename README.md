@@ -11,9 +11,13 @@ so every word has been answered correctly at least once.
 
 Android, offline, no backend.
 
-- **Working now:** the trainer, a bundled 3,545-word English–German dictionary generated
-  from Wiktionary, and generated practice sessions that remember what you have seen so
-  consecutive sessions ask different words. Fixed sets are still there for targeted drills.
+- **Working now:** the trainer, a bundled English–German dictionary generated from
+  Wiktionary — 3,545 prompts against 5,154 German words — and sessions that remember what
+  you have seen. **No word is ever asked twice.** Each session is at least 80% material
+  you have never met, most common first, with a small slice of revision weighted towards
+  what you get wrong.
+- **Pick your level:** Basics (the 1,000 most common words), Common words (the next
+  1,000), or Wider vocabulary — or Practice straight through the whole dictionary.
 - **Next:** OCR — photograph a book page and practise the words on it.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan and
@@ -42,9 +46,15 @@ instructions and the data pipeline are in [`docs/BUILD.md`](docs/BUILD.md).
 
 ## Data and licensing
 
-Dictionary data derives from [German Wiktionary](https://de.wiktionary.org) via the
-[`cstr/de-wiktionary-extracted`](https://huggingface.co/datasets/cstr/de-wiktionary-extracted)
-export, licensed **CC-BY-SA 4.0**. Any generated dictionary carries the same licence.
-Details in [`docs/DATA-SOURCES.md`](docs/DATA-SOURCES.md).
+Dictionary data derives from the [English Wiktionary](https://en.wiktionary.org) via the
+[kaikki.org](https://kaikki.org/dictionary/English/) machine-readable export, licensed
+**CC-BY-SA 4.0**. Any generated dictionary carries the same licence. Details in
+[`docs/DATA-SOURCES.md`](docs/DATA-SOURCES.md).
+
+The German Wiktionary edition was tried first and rejected: `wiktextract` shatters
+multi-word English translations there into separate word-level entries, so "piece of
+furniture" becomes `item`, `piece`, `of`, `furniture`. That is a correctness decision, not
+a convenience one — the reasoning is in `docs/DATA-SOURCES.md` and should be read before
+changing the source.
 
 The application code is licensed under the [MIT License](LICENSE).

@@ -28,6 +28,14 @@ data/dist/                      generated dictionary
 
 - **v1 is one-to-one translations.** `house` → `Haus`. Not full dictionary entries, not
   multi-sense disambiguation.
+- **No word is ever asked twice.** Every session is ≥80% material never seen before; the
+  rest is failure-weighted revision, and nothing from the previous session. A pool with
+  nothing new left yields an *empty* session, never a replay. Read the selection rules in
+  `docs/ARCHITECTURE.md` before touching `SessionComposer` — this has been re-reported as
+  a bug three times.
+- **`words_en.freq_rank` is not a rank.** It is `round((8 − zipf) × 1000)`: ~1,590 to
+  6,990, heavily tied. `ORDER BY` it; never filter on its value. Positional slicing needs
+  `ORDER BY freq_rank, id` with `LIMIT`/`OFFSET`.
 - **English↔German is the only generated pair.** The pipeline is pair-parameterised, so
   adding one is configuration rather than redesign.
 - **Dictionary data comes from the *English* Wiktionary edition**, not the German one.
@@ -44,9 +52,13 @@ data/dist/                      generated dictionary
 - Compiled bindings everywhere: every XAML page and `DataTemplate` sets `x:DataType`.
 - Bind `IsVisible` to a real `bool` property (`HasHint`, `HasError`) — a string does not
   convert.
-- Hints must never contain their own answer; `BundledSetsTests` enforces it.
+- Hints must never contain their own answer — `das … (neuter)`, never `das Haus`.
+  `PracticeSessionFactoryTests` and a Python exporter test enforce it.
 - New extraction or scheduling rules need a test that would fail without them. Row counts
   and green builds have both looked healthy while the behaviour was wrong.
+- **Make test fixtures resemble the real data.** A fixture with dense `freq_rank` values
+  1..N passed while the shipped dictionary produced an empty band; one that played every
+  session perfectly never reached the relearning path that was broken.
 
 ## Working agreements
 

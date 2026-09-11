@@ -32,7 +32,7 @@ Completed and verified requirements, moved here from `REQUIREMENTS.md`.
 - [x] **R-116** MVVM throughout with `CommunityToolkit.Mvvm`, DI registered in `MauiProgram`, Shell routes.
 - [x] **R-117** Diacritics-leniency toggle on the home screen, persisted via `Preferences`.
 - [x] **R-118** Builds and runs on Android; a full session including a missed word looping into round two was completed on the `pixel_6a_-_api_36_0` emulator.
-- [x] **R-119** Hints never reveal their own answer (`das … (neuter)`, not `das Haus`). Enforced by `BundledSetsTests` and by the Python exporter's tests.
+- [x] **R-119** Hints never reveal their own answer (`das … (neuter)`, not `das Haus`). Originally enforced by `BundledSetsTests`; that file went with the JSON sets it validated (R-324), and the rule is now enforced by `PracticeSessionFactoryTests` on generated hints and by the Python exporter's tests at the source.
 
 ## Phase 2 — Python data pipeline · 2026-09-10
 
