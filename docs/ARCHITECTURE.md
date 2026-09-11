@@ -105,10 +105,11 @@ Two factories build sessions, and **both** consult progress:
 
 The home screen offers **Practice** over the whole of the selected pair's dictionary,
 plus that pair's `FrequencyBand.For(pair)`: Basics (the 1,000 most common), Common words
-(the next 1,000), Wider vocabulary (the rest). `FrequencyBand.All` is every pair's bands
-together, used only to resolve a route id back to a band without knowing the pair up
-front; a band's `Id` carries its pair (`"en-de:basics"`, `"en-es:basics"`) so two pairs'
-bands never collide.
+(the next 1,000), Wider vocabulary (the rest). `FrequencyBand.All` is every pair's bands,
+in both directions (see "Reversed practice" below), together — used only to resolve a
+route id back to a band without knowing the pair up front; a band's `Id` carries its pair
+and direction (`"en-de:basics"` forward, `"en-de:reverse:basics"` reversed) so nothing
+collides.
 
 These replaced three hand-written JSON sets of **twelve words each**. Those were written
 in Phase 1, before the dictionary existed, and were never revisited once it did — a
@@ -125,41 +126,85 @@ vocabulary rather than separate courses: a word learned under Basics is never of
 
 `FixedSetSessionFactory` remains for externally supplied word lists. Its `SizeFor` takes
 **half the set**, capped at `DefaultSize`, so a set always yields at least two disjoint
-sessions before it is exhausted.
+sessions before it is exhausted. Fixed sets do not support reversed practice — the
+learner chose their exact words and direction, and there is nothing to reverse against.
+
+### Reversed practice (R-305)
+
+The home screen's direction toggle swaps the whole app between "en → de" and "de → en"
+(or the Spanish equivalent) — the prompt becomes the target-language word, and the
+learner types the English answer. Nothing is precomputed or regenerated for this: the
+same `translations` rows built for the forward direction already hold each English
+word's curated primary-sense answers, and `SqliteDictionaryStore` simply reads them the
+other way round, grouping by the target-language id instead of the English one.
+
+That reuse has one real consequence worth knowing: a handful of target-language words
+translate more than one English word (`Amt` → *office*, *trunk*; about 6.5% of German
+words in the shipped dictionary). Reversed, both become acceptable answers to the same
+prompt — exactly how multiple German answers to one English prompt already work forward.
+This is genuine polysemy already curated into the pairs table, not new ambiguity
+introduced by reversing it.
+
+Two things that exist forward have no reverse equivalent, and are simply absent rather
+than approximated:
+
+- **Gender hints.** English carries no grammatical gender, so a reversed `DictionaryWord`
+  always has a null `Hint`.
+- **A real frequency column for the target language.** The pipeline never ranks German or
+  Spanish frequency on its own — only English gets `freq_rank`. Reversed "most common
+  first" is approximated as the *best* `freq_rank` among the English words a target word
+  translates: a word that translates something common is, in practice, usually itself
+  common. See `SqliteDictionaryStore.Ordered`.
+
+Direction is a property of a `PracticeSessionFactory`/`SqliteDictionaryStore` call, not
+of a `LanguagePair` — the same pair practised either way. It is chosen on the home
+screen (`HomeViewModel.IsReversed`, persisted in `AppSettings.PracticeReversed`) and
+carried through the route id (`FrequencyBand.Reversed`, or a `:reverse` segment on a
+generated Practice id) so `SessionViewModel` can reconstruct it without a second query
+parameter.
 
 ### Scoping
 
 Word ids are unique only within a pool: each pair's dictionary numbers words from its own
-`words_en`, starting at 1 again for every pair, and a fixed set numbers its own words by
-position. `ProgressScope` keeps them apart:
+`words_en`, starting at 1 again for every pair; reversed, it numbers from the
+target-language table instead (also starting at 1) — a different id space from forward,
+not merely a different range of the same one. A fixed set numbers its own words by
+position. `ProgressScope` keeps all of this apart:
 
-- `ProgressScope.Dictionary` (`"dictionary"`) — the **English-German** dictionary,
-  specifically. Kept as this exact bare literal rather than a pair-derived key, because
-  every installed copy's progress was already written under it before language pairs
-  existed; changing the key would silently orphan real learners' history.
-- `ProgressScope.ForDictionary(pairId)` — every other pair gets `"dictionary:<pair id>"`;
-  called with `"en-de"` it returns the legacy literal above, so callers never need to
-  special-case German.
+- `ProgressScope.Dictionary` (`"dictionary"`) — **forward** English-German,
+  specifically. Kept as this exact bare literal rather than a derived key, because every
+  installed copy's progress was already written under it before language pairs or
+  reversed practice existed; changing it would silently orphan real learners' history.
+- `ProgressScope.ForDictionary(pairId, reversed)` — every other pair-and-direction
+  combination gets `"dictionary:<pair id>"` forward or `"dictionary:<pair id>:reverse"`
+  reversed; called with `("en-de", false)` it returns the legacy literal above, so
+  callers never need to special-case German.
 - `ProgressScope.ForSet(setId)` — a bundled or imported set, by its own id.
 
-All three bands of one pair share that pair's dictionary scope, because they are slices
-of one pool; Basics and Practice in German never share a scope with Basics and Practice
-in Spanish.
+Forward and reversed practice of the *same* pair are deliberately separate scopes, not
+just separately counted: they draw on different id spaces, and getting good at "house →
+Haus" does not mean the learner recognises "Haus" cold, so counting one as progress on
+the other would overstate what has actually been learned.
+
+All three bands of one pair and direction share that combination's dictionary scope,
+because they are slices of one pool; Basics and Practice in German never share a scope
+with Basics and Practice in Spanish, or with reversed German.
 
 **Session numbering is per-scope too.** A global counter would let dictionary practice
 advance a fixed set's rotation, so its no-repeat rule would be satisfied by sessions the
-learner never played there. The same reasoning keeps German and Spanish session counters
-apart.
+learner never played there. The same reasoning keeps German, Spanish and reversed-German
+session counters apart.
 
-The milestone bar counts the *selected pair's* dictionary scope only, so finishing an
-OCR'd page raises no milestone, and learning Spanish words does not push the German
-milestone forward or vice versa.
+The milestone bar counts the *selected pair and direction's* dictionary scope only, so
+finishing an OCR'd page raises no milestone, and learning Spanish words — or practising
+German backwards — does not push the forward German milestone forward or vice versa.
 
 **Word order depends on whether frequency is known.**
 
 - A *dictionary* session is presented **most common first**, which is the order worth
-  learning in. Its membership changes every session, so a deterministic order never feels
-  repetitive.
+  learning in — using the real `freq_rank` column forward, or the approximation
+  described under "Reversed practice" above when reversed. Its membership changes every
+  session, so a deterministic order never feels repetitive.
 - A *fixed* set has no frequency data, so `SessionViewModel` calls
   `VocabularySet.Shuffled()` on it.
 

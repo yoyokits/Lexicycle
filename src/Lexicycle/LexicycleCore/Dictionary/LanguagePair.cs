@@ -23,6 +23,8 @@ public sealed record LanguagePair(string Id, string TargetLanguage, string Name)
 
     public static LanguagePair? ById(string id) => All.FirstOrDefault(pair => pair.Id == id);
 
-    /// <summary>Short label for a session card, e.g. "en → de".</summary>
-    public string DirectionLabel => $"en → {TargetLanguage}";
+    /// <summary>Short label for a session card, e.g. "en → de" or, reversed, "de → en"
+    /// (R-305: practising the other direction of the same pair).</summary>
+    public string DirectionLabel(bool reversed = false)
+        => reversed ? $"{TargetLanguage} → en" : $"en → {TargetLanguage}";
 }

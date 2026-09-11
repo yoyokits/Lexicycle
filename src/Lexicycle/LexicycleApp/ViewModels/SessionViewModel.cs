@@ -25,6 +25,7 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
     private PracticeSessionFactory.PracticeSession? _practice;
     private PracticeSessionFactory? _factory;
     private LanguagePair? _pair;
+    private bool _reversed;
 
     /// <summary>Set only for fixed sets — the bundled JSON, and later an OCR'd page.</summary>
     private FixedSetSessionFactory.FixedSetSession? _fixedSet;
@@ -164,9 +165,9 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
         _fixedSet = null;
 
         var band = FrequencyBand.ById(setId);
-        _pair = band is not null
-            ? LanguagePair.ById(band.PairId)
-            : PracticeSessionFactory.PairForGeneratedSetId(setId);
+        var generatedRoute = band is null ? PracticeSessionFactory.PairForGeneratedSetId(setId) : null;
+        _pair = band is not null ? LanguagePair.ById(band.PairId) : generatedRoute?.Pair;
+        _reversed = band?.Reversed ?? generatedRoute?.Reversed ?? false;
         var isGenerated = _pair is not null;
 
         try
@@ -235,7 +236,7 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
         var dictionary = await _databases.GetDictionaryAsync(pair)
             ?? throw new InvalidOperationException($"No dictionary bundled for {pair.Id}.");
 
-        _factory = new PracticeSessionFactory(pair, dictionary, _databases.Progress);
+        _factory = new PracticeSessionFactory(pair, dictionary, _databases.Progress, _reversed);
 
         _practice = await _factory.CreateAsync(band: band);
         return _practice.Set;
@@ -355,7 +356,7 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
             }
 
             var progress = _databases.Progress;
-            var scope = ProgressScope.ForDictionary(_pair.Id);
+            var scope = ProgressScope.ForDictionary(_pair.Id, _reversed);
 
             // Measured either side of the write, so the comparison covers exactly this
             // session and a milestone can only ever be celebrated once.

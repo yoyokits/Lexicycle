@@ -63,8 +63,16 @@ The dictionary, bands, and progress scoping are all pair-parameterised
 (`LanguagePair`) rather than English-German-specific, so a second pair is bundling a
 second `.db` file, not new code — see `docs/DATA-SOURCES.md` and R-504.
 
-Still open: reverse-direction practice (R-305), the attribution screen (R-306), and a
-global reset (R-323 — per-set restart landed with R-310).
+A direction toggle on the home screen (R-305) swaps any pair between "en → de" and
+"de → en" without a second dictionary: the same curated `translations` rows are read
+backwards, target-language word in, English answer out, with their own progress scope
+and session rotation entirely separate from the forward direction. Gender hints and real
+frequency ordering are forward-only concepts — English has no grammatical gender to hint
+at, and reversed ordering is an approximation from the English side's `freq_rank`, since
+the pipeline never ranks German or Spanish frequency on its own. See `docs/ARCHITECTURE.md`.
+
+Still open: the attribution screen (R-306) and a global reset (R-323 — per-set restart
+landed with R-310).
 
 ## Phase 4 — OCR photo input
 

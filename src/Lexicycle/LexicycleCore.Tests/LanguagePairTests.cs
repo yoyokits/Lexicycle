@@ -83,9 +83,21 @@ public sealed class LanguagePairTests : IAsyncLifetime
     public void Generated_set_ids_round_trip_to_their_pair()
     {
         var id = PracticeSessionFactory.GeneratedSetIdFor(LanguagePair.Spanish);
+        var route = PracticeSessionFactory.PairForGeneratedSetId(id);
 
-        Assert.Equal(LanguagePair.Spanish, PracticeSessionFactory.PairForGeneratedSetId(id));
+        Assert.Equal(LanguagePair.Spanish, route?.Pair);
+        Assert.False(route?.Reversed);
         Assert.Null(FrequencyBand.ById(id));
+    }
+
+    [Fact]
+    public void Reversed_generated_set_ids_round_trip_too()
+    {
+        var id = PracticeSessionFactory.GeneratedSetIdFor(LanguagePair.German, reversed: true);
+        var route = PracticeSessionFactory.PairForGeneratedSetId(id);
+
+        Assert.Equal(LanguagePair.German, route?.Pair);
+        Assert.True(route?.Reversed);
     }
 
     [Fact]

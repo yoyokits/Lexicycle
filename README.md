@@ -23,6 +23,9 @@ Android, offline, no backend.
   built around language pairs rather than English-German specifically. English-Spanish
   ships alongside it, and a language switcher appears on the home screen once more than
   one pair's dictionary is bundled — each pair keeps its own progress and milestone.
+- **Practise either direction:** a toggle on the home screen swaps any pair between,
+  say, "en → de" and "de → en" — no second dictionary needed, and each direction keeps
+  its own progress, since recognising a word cold is a different skill from producing it.
 - **Next:** OCR — photograph a book page and practise the words on it.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan and

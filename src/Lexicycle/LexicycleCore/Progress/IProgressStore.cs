@@ -21,11 +21,22 @@ public static class ProgressScope
     public const string Dictionary = "dictionary";
 
     /// <summary>
-    /// The generated dictionary for one language pair. English-German keeps the legacy
-    /// unscoped key so existing progress is not orphaned; every other pair gets its own.
+    /// The generated dictionary for one language pair and direction (R-305). Forward
+    /// English-German keeps the legacy unscoped key so existing progress is not orphaned;
+    /// every other combination gets its own. Forward and reversed practice of the *same*
+    /// pair are deliberately separate scopes — they draw on different id spaces (English
+    /// word ids forward, target-language word ids reversed) and are different skills, so
+    /// a word learned one way is not counted as learned the other.
     /// </summary>
-    public static string ForDictionary(string pairId)
-        => pairId == "en-de" ? Dictionary : $"dictionary:{pairId}";
+    public static string ForDictionary(string pairId, bool reversed = false)
+    {
+        if (!reversed && pairId == "en-de")
+        {
+            return Dictionary;
+        }
+
+        return reversed ? $"dictionary:{pairId}:reverse" : $"dictionary:{pairId}";
+    }
 
     /// <summary>A bundled or imported set is scoped by its own id.</summary>
     public static string ForSet(string setId) => $"set:{setId}";

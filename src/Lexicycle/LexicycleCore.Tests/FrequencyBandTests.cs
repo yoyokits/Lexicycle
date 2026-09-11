@@ -234,7 +234,7 @@ public sealed class FrequencyBandTests : IAsyncLifetime
         var ids = FrequencyBand.All.Select(band => band.Id).ToList();
 
         Assert.Equal(ids.Count, ids.Distinct().Count());
-        Assert.Equal(LanguagePair.All.Count * 3, ids.Count);
+        Assert.Equal(LanguagePair.All.Count * 2 * 3, ids.Count);   // pairs x directions x windows
         Assert.All(FrequencyBand.All, band => Assert.NotNull(LanguagePair.ById(band.PairId)));
     }
 }

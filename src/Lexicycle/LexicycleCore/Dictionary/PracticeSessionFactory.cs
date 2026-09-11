@@ -18,39 +18,62 @@ public sealed class PracticeSessionFactory
     public const int DefaultSize = 10;
 
     /// <summary>Prefix of a whole-dictionary Practice session's route id, before the
-    /// pair id — <c>"practice:en-de"</c>, <c>"practice:en-es"</c>.</summary>
+    /// pair id — <c>"practice:en-de"</c>, <c>"practice:en-de:reverse"</c>.</summary>
     private const string GeneratedSetPrefix = "practice";
 
     private readonly LanguagePair _pair;
+    private readonly bool _reversed;
     private readonly IDictionaryStore _dictionary;
     private readonly IProgressStore _progress;
     private readonly SessionComposer _composer;
 
+    /// <param name="reversed">
+    /// R-305: practise the other direction of this pair — the prompt is the
+    /// target-language word, the answer is English. A completely separate progress scope
+    /// and id space from the forward direction; see <see cref="ProgressScope.ForDictionary"/>.
+    /// </param>
     public PracticeSessionFactory(
         LanguagePair pair,
         IDictionaryStore dictionary,
         IProgressStore progress,
+        bool reversed = false,
         SessionComposer? composer = null)
     {
         _pair = pair;
+        _reversed = reversed;
         _dictionary = dictionary;
         _progress = progress;
         _composer = composer ?? new SessionComposer();
     }
 
-    /// <summary>The route id for practising the whole of one pair's dictionary.</summary>
-    public static string GeneratedSetIdFor(LanguagePair pair) => $"{GeneratedSetPrefix}:{pair.Id}";
+    /// <summary>The route id for practising the whole of one pair's dictionary, in the
+    /// given direction.</summary>
+    public static string GeneratedSetIdFor(LanguagePair pair, bool reversed = false)
+        => reversed ? $"{GeneratedSetPrefix}:{pair.Id}:reverse" : $"{GeneratedSetPrefix}:{pair.Id}";
+
+    /// <summary>What a generated-practice route id names: the pair and direction.</summary>
+    public readonly record struct GeneratedRoute(LanguagePair Pair, bool Reversed);
 
     /// <summary>
-    /// The pair a generated-practice route id names, or null if it names something else
-    /// (a frequency band, a bundled set) instead.
+    /// The pair and direction a generated-practice route id names, or null if it names
+    /// something else (a frequency band, a bundled set) instead.
     /// </summary>
-    public static LanguagePair? PairForGeneratedSetId(string setId)
+    public static GeneratedRoute? PairForGeneratedSetId(string setId)
     {
-        var parts = setId.Split(':', 2);
-        return parts.Length == 2 && parts[0] == GeneratedSetPrefix
-            ? LanguagePair.ById(parts[1])
-            : null;
+        var parts = setId.Split(':');
+        if (parts.Length < 2 || parts[0] != GeneratedSetPrefix)
+        {
+            return null;
+        }
+
+        var pair = LanguagePair.ById(parts[1]);
+        if (pair is null)
+        {
+            return null;
+        }
+
+        var reversed = parts.Length >= 3 && parts[2] == "reverse";
+        return new GeneratedRoute(pair, reversed);
     }
 
     /// <summary>A generated session, plus the bookkeeping needed to record its results.</summary>
@@ -71,14 +94,14 @@ public sealed class PracticeSessionFactory
     /// Restricts the draw to one frequency band. Progress stays in the single dictionary
     /// scope whichever band is used, so a word learned under "Basics" is not asked again
     /// under "Practice" — the bands are views over one body of vocabulary, not separate
-    /// courses.
+    /// courses. Must match this factory's own direction if given.
     /// </param>
     public async Task<PracticeSession> CreateAsync(
         int size = DefaultSize,
         FrequencyBand? band = null,
         CancellationToken cancellationToken = default)
     {
-        var scope = ProgressScope.ForDictionary(_pair.Id);
+        var scope = ProgressScope.ForDictionary(_pair.Id, _reversed);
         var seen = await _progress
             .GetAllAsync(scope, cancellationToken)
             .ConfigureAwait(false);
@@ -89,12 +112,12 @@ public sealed class PracticeSessionFactory
         // Only words never asked before are candidates for the "new" half.
         var alreadySeen = seen.Select(progress => progress.WordId).ToHashSet();
         var unseen = await _dictionary
-            .GetUnseenIdsAsync(alreadySeen, size, band, cancellationToken)
+            .GetUnseenIdsAsync(alreadySeen, size, band, _reversed, cancellationToken)
             .ConfigureAwait(false);
 
         var plan = _composer.Compose(sessionNumber, size, seen, unseen);
         var words = await _dictionary
-            .GetWordsAsync(plan.AllWordIds, cancellationToken)
+            .GetWordsAsync(plan.AllWordIds, _reversed, cancellationToken)
             .ConfigureAwait(false);
 
         // Most common first, so the words worth knowing come before the obscure ones.
@@ -104,11 +127,14 @@ public sealed class PracticeSessionFactory
             .ThenBy(word => word.Source, StringComparer.Ordinal)
             .ToList();
 
+        var name = band is null
+            ? $"Practice · session {sessionNumber}"
+            : band.Name;
         var set = new VocabularySet(
-            band?.Id ?? GeneratedSetIdFor(_pair),
-            band is null ? $"Practice · session {sessionNumber}" : band.Name,
-            "en",
-            _pair.TargetLanguage,
+            band?.Id ?? GeneratedSetIdFor(_pair, _reversed),
+            name,
+            _reversed ? _pair.TargetLanguage : "en",
+            _reversed ? "en" : _pair.TargetLanguage,
             ordered.Select(word => word.ToWordPair()).ToList());
 
         // The engine works in WordPairs; this maps its summary back to dictionary ids.
@@ -141,7 +167,7 @@ public sealed class PracticeSessionFactory
 
         await _progress
             .RecordAsync(
-                ProgressScope.ForDictionary(_pair.Id), session.SessionNumber, outcomes, cancellationToken)
+                ProgressScope.ForDictionary(_pair.Id, _reversed), session.SessionNumber, outcomes, cancellationToken)
             .ConfigureAwait(false);
     }
 }

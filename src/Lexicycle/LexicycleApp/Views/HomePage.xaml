@@ -48,6 +48,28 @@
                 </CollectionView.ItemTemplate>
             </CollectionView>
 
+            <!--
+                Direction toggle (R-305). A standalone control rather than folded into the
+                Practice/band cards' own direction badges — nesting a second tap target
+                inside an already-tappable Border risks both gestures firing on some
+                platforms, and "which way round" is a page-level setting anyway, not a
+                per-card action.
+            -->
+            <Border
+                HorizontalOptions="Start"
+                Padding="12,6"
+                Stroke="{StaticResource Primary}"
+                StrokeThickness="1">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="14" />
+                </Border.StrokeShape>
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding ToggleDirectionCommand}" />
+                </Border.GestureRecognizers>
+
+                <Label FontAttributes="Bold" FontSize="13" Text="{Binding DirectionLabel, StringFormat='⇄ {0}'}" />
+            </Border>
+
             <!--  The dictionary-backed session: different words every time.  -->
             <Border Style="{StaticResource Card}">
                 <Border.GestureRecognizers>

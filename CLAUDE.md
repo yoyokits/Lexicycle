@@ -36,13 +36,13 @@ data/dist/                      generated dictionary
 - **`words_en.freq_rank` is not a rank.** It is `round((8 − zipf) × 1000)`: ~1,590 to
   6,990, heavily tied. `ORDER BY` it; never filter on its value. Positional slicing needs
   `ORDER BY freq_rank, id` with `LIMIT`/`OFFSET`.
-- **English-German and English-Spanish are the supported pairs**, both source-from-
-  English (v1 asks "what is the *X* for *house*?", not the reverse — R-305). The pipeline,
-  `LanguagePair`, and progress scoping are all pair-parameterised, so a third pair is
-  configuration (one code in `sources.TARGET_LANGUAGES`) rather than redesign. Spanish's
-  database has not been generated yet — see `docs/DATA-SOURCES.md` — so a build without
-  it bundled behaves exactly as a single-pair app; the language switcher only appears once
-  more than one pair's `.db` is present.
+- **English-German and English-Spanish ship as bundled dictionaries**; each can be
+  practised in either direction (a home-screen toggle, R-305) without a second database —
+  reversed reads the same curated `translations` rows backwards. The pipeline,
+  `LanguagePair`, `FrequencyBand` and progress scoping are all pair-*and-direction*
+  parameterised, so a third pair is configuration (one code in `sources.TARGET_LANGUAGES`)
+  rather than redesign. A build missing a pair's `.db` behaves as if that pair does not
+  exist; the language switcher only appears once more than one pair is bundled.
 - **Dictionary data comes from the *English* Wiktionary edition**, not the German one.
   The German edition fragments multi-word translations and is unusable — read
   `docs/DATA-SOURCES.md` before changing the source.
