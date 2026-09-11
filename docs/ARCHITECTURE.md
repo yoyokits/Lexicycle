@@ -72,6 +72,18 @@ list, and consecutive sessions ask different things.
 deliberately — the bundled JSON, and later an OCR'd page — go straight to the engine with
 exactly the words they were given, because rotating those away would be wrong.
 
+**Word order is chosen per session, not stored.** `SessionViewModel` calls
+`VocabularySet.Shuffled()` on every path, generated and fixed alike. Sets have a natural
+stored order — file order for the bundled JSON, frequency order for a generated session —
+and asking them in it made every visit to a fixed set identical: "German basics" opened
+`house dog cat car` every single time, which reads as "it keeps asking the same
+questions" even where the rotation is working correctly. Ordering is a property of a
+session, not of a set, so it lives at the point the session starts rather than in
+`SessionEngine`, whose job is round mechanics.
+
+A fixed set is still asked in full: shuffling changes the order, not the membership. A
+12-word set drilled 12 at a time necessarily contains the same 12 words each visit.
+
 `ReviewSchedule` is a Leitner scheme counted in **sessions, not days**, so someone
 practising twice a week gets the same sequence as someone practising twice a day:
 

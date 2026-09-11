@@ -148,7 +148,11 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
             }
 
             SetName = set.Name;
-            _engine = new SessionEngine(set, _settings.CreateComparer());
+
+            // Order is chosen per session, not stored. Without this a fixed set opens with
+            // the same word every time, which reads as "it is asking me the same questions"
+            // even when the rotation is working.
+            _engine = new SessionEngine(set.Shuffled(), _settings.CreateComparer());
             RefreshFromEngine();
         }
         catch (Exception ex)
