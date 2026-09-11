@@ -87,13 +87,14 @@ Implemented in `src/python/lexicycle_data/model.py`, and covered by tests.
 | Keep only `lang_code == "en"` rows | Guards against a mixed dump |
 | Keep only translations whose `code`/`lang_code` matches the pair being built | A distilled row can carry several target languages' translations together; `build --pair en-es` and `build --pair en-de` read the same file and each keeps only its own |
 | Keep only `pos` in noun / verb / adj / adv | `the → der \| die \| das` is not vocabulary worth drilling |
-| Keep only the **primary sense's** translations | "run" carries 41 German translations across dozens of senses; accepting all of them makes the question meaningless |
+| Keep **every sense's** translations as candidates | One English word usually means several things, and each meaning has its own target-language word: "run" is `laufen`/`rennen` but also `fließen`; "drop" is `fallen` but also `abnehmen`. All are correct answers to a bare prompt. Breadth is bounded by the frequency rule below, not by which sense Wiktionary lists first |
 | Reject multi-word English prompts | Wiktionary headwords include phrases ("as in", "what if") that are not vocabulary. Costs us genuine phrasal verbs too — see R-509 |
 | Reject English function words by stoplist | They arrive as adverbs and nouns, but `in → herein` and `that → dermaßen` are grammar, not vocabulary |
 | Drop translations tagged obsolete, archaic, rare, dated, misspelling, nonstandard | Poor answers to require |
 | Drop translations tagged with a **regional variant** (Alemannic, Swiss, Bavarian, Palatine, Rhine-Franconian, Low German, dialectal, colloquial, slang) | Wiktionary lists dialect forms beside the standard word, so "time" otherwise collects Zeit, Zit, Ziit and zeid as equally valid |
 | Reject terms with a leading/trailing `-` or containing `...` | `"-ste"` and `"am ...-sten"` are endings, not words |
-| Order answers by **target-language** frequency and keep the best 4, dropping any far rarer than the best | Source order does not put the standard word first — "love" offers `Liab` before `Liebe` — so frequency, not position, picks the answer shown to the learner |
+| Order answers by **target-language** frequency and keep the best 4, dropping any far rarer than the best | Source order does not put the standard word first — "love" offers `Liab` before `Liebe` — so frequency, not position, picks the answer shown to the learner. This is also what bounds sense breadth: a rare secondary sense (`house` → `Zunft`, "guild") falls outside the rank gap and never becomes an answer |
+| Store answers **most common first** | Id order is the only ordering that survives into the app, which reads answers back with `ORDER BY tw.id` and shows the first one when a word is missed. Assigning ids alphabetically threw the ranking away and let ASCII choose: uppercase nouns sort before lowercase verbs, so "run" displayed `Schnellgang` ("overdrive") ahead of `laufen`, and "feel" displayed `Haptik` ahead of `spüren` |
 | Strip a trailing `(...)` qualifier | `"Säbel (curved)"` → `"Säbel"` |
 | Reject terms containing `[ ] { } < > \| / ; … "` | Square brackets wrap glosses. Stripping them would leave a plausible-looking but wrong term |
 | Reject terms of more than three words | Those are explanations, not vocabulary. The limit still admits "sich freuen" and separable verbs |
@@ -169,23 +170,27 @@ a parameter rather than assuming German.
 ## Size
 
 Measured with `python -m lexicycle_data report --pair en-de`. The extract holds
-1,492,836 rows, of which **3,775 English lemmas survive extraction** with at least one
+1,492,836 rows, of which **3,806 English lemmas survive extraction** with at least one
 German translation.
 
 | top-N | EN words | DE words | pairs | size |
 | --- | --- | --- | --- | --- |
-| 1,000 | 1,000 | 1,537 | 1,649 | 184 KB |
-| 5,000 | 3,648 | 5,126 | 5,517 | 536 KB |
-| all | 3,648 | 5,126 | 5,517 | **536 KB** |
+| 1,000 | 1,000 | 1,648 | 1,798 | 196 KB |
+| 5,000 | 3,671 | 5,342 | 5,828 | 552 KB |
+| all | 3,671 | 5,342 | 5,828 | **552 KB** |
 
-The whole dictionary is 536 KB, so the top-N cut is moot — ship all of it. Size was never
+The whole dictionary is 552 KB, so the top-N cut is moot — ship all of it. Size was never
 the binding constraint; quality was. The **en-es** dictionary, generated the same way, is
-3,655 English words / 5,001 Spanish words / 5,367 pairs at 528 KB — run `report --pair
+3,689 English words / 5,211 Spanish words / 5,664 pairs at 536 KB — run `report --pair
 en-es` for the full breakdown by top-N.
+
+Accepting every sense (rather than only the first) added 311 pairs and 23 words to
+en-de — a 5.6% increase, with the longest answer list unchanged at 8. Breadth is
+bounded by the frequency rule, not by the number of senses.
 
 Note that only ~5,100 English entries carry a translations table at all. Wiktionary
 attaches translations to a fraction of its headwords, and the extraction rules below then
-remove roughly a quarter of those. ~3,650 drillable words is a solid beginner-to-
+remove roughly a quarter of those. ~3,670 drillable words is a solid beginner-to-
 intermediate vocabulary, not a comprehensive dictionary. These counts drift a little
 between runs — kaikki.org's extract is refreshed periodically, so a re-`download` is
 never byte-identical to the last one.
@@ -194,9 +199,26 @@ never byte-identical to the last one.
 
 Honest about what the data still gets wrong, so nobody re-discovers it:
 
-- **Primary-sense selection is only as good as Wiktionary's sense order.** `go → machen`
-  and `give → nachgeben` are both first-sense artefacts; the obvious answers are `gehen`
-  and `geben`. Fixing this needs sense ranking rather than "take the first".
+- **Wiktionary's translation tables are incomplete, and no extraction rule can fix that.**
+  `go → machen` and `give → nachgeben` look like sense-selection bugs and were once
+  documented as such. They are not: dumping the raw rows shows `go` has exactly **one**
+  German translation in the extract (`machen`, under "to make a specified sound") and
+  `give` exactly one (`nachgeben`). `gehen` and `geben` are absent altogether, as are
+  `führen`/`betreiben` for "run a business" and `wissen` for "know". Volunteers fill
+  translation tables in per sense and per language, so common senses can simply be
+  missing. Supplementing them by hand would need an override file the pipeline merges
+  in — deliberately not built.
+- **A more frequent word can outrank a more precise one.** Answers are shown
+  most-common-first, and German frequency is not a measure of translation quality:
+  "Lady" leads with `Frau` over `Dame`, "Satan" with `Teufel` over `Satan`. Both remain
+  accepted answers; only the displayed one changes.
+- **Domain jargon rides along with everyday senses.** "fork" collects `Abspaltung`,
+  `Fork` and `Verzweigung` from computer-science senses beside the eating utensil, and
+  can lead with `spalten`. Filtering these needs the topic tags wiktextract sometimes
+  carries.
+- **456 English words have an answer spelled identically to the prompt** (`hotel`,
+  `Buddha`, `line → Line`). For 326 of them it is the only answer, so a blanket filter
+  would delete legitimate loanword pairs; a narrower rule is untried.
 - **Untagged dialect forms survive when they are common enough.** German frequency
   ordering removes `Liab`, `Ziit` and `kemma`, but `home → Ham | Heim | …` still leads
   with a regionalism because `Ham` scores as a real German word.

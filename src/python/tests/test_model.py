@@ -9,7 +9,6 @@ from lexicycle_data.model import (
     extract_gender,
     extract_translations,
     is_drillable_prompt,
-    primary_sense_translations,
     row_to_entry,
     rows_to_entries,
 )
@@ -65,27 +64,6 @@ class TestExtractGender:
         assert extract_gender(tags) == expected
 
 
-class TestPrimarySense:
-    def test_keeps_only_the_first_sense(self):
-        translations = [
-            translation("rennen", "to move quickly on two feet"),
-            translation("laufen", "to move quickly on two feet"),
-            translation("umlaufen", "to move or spread quickly"),
-        ]
-
-        kept = [t["word"] for t in primary_sense_translations(translations)]
-
-        assert kept == ["rennen", "laufen"]
-
-    def test_keeps_everything_when_no_senses_are_labelled(self):
-        translations = [translation("Haus"), translation("Gebäude")]
-
-        assert len(primary_sense_translations(translations)) == 2
-
-    def test_handles_an_empty_list(self):
-        assert primary_sense_translations([]) == []
-
-
 class TestExtractTranslations:
     def test_returns_terms_with_their_gender(self):
         result = extract_translations(
@@ -123,6 +101,47 @@ class TestExtractTranslations:
     def test_handles_missing_translations(self):
         assert extract_translations(None, "de") == ()
         assert extract_translations([], "de") == ()
+
+    def test_keeps_every_sense_not_just_the_first(self):
+        """One English word can mean several things, and each meaning is a valid answer.
+
+        "run" is both `laufen`/`rennen` and `fließen`; a learner typing any of them has
+        translated the prompt correctly. Which of them actually ship is decided later,
+        by frequency, in database.build_database.
+        """
+        result = extract_translations(
+            [
+                translation("laufen", "to move quickly on two feet"),
+                translation("rennen", "to move quickly on two feet"),
+                translation("fließen", "to flow"),
+            ],
+            "de",
+        )
+
+        assert result == (("laufen", None), ("rennen", None), ("fließen", None))
+
+    def test_a_word_repeated_across_senses_is_one_answer(self):
+        """Wiktionary lists "laufen" under several senses of "run"; it is one answer."""
+        result = extract_translations(
+            [
+                translation("laufen", "to move quickly on two feet"),
+                translation("laufen", "to move quickly"),
+            ],
+            "de",
+        )
+
+        assert result == (("laufen", None),)
+
+    def test_a_gender_found_on_a_later_sense_is_kept(self):
+        result = extract_translations(
+            [
+                translation("Bank", "financial institution"),
+                translation("Bank", "bench", ["feminine"]),
+            ],
+            "de",
+        )
+
+        assert result == (("Bank", "feminine"),)
 
     def test_picks_out_one_language_from_a_shared_sense(self):
         """A distilled row can carry several target languages' translations of the same
@@ -219,8 +238,11 @@ def test_rows_to_entries_filters_the_stream(rows):
     assert "the" not in words  # function word
     assert "Haus" not in words  # wrong language edition
 
+    # Every sense reaches the Entry, including the rarer "guild" one. Whether Zunft
+    # survives into the built dictionary is a frequency question, tested in
+    # test_database.py, not something extraction decides.
     house = next(entry for entry in entries if entry.word == "house")
-    assert house.translations == (("Haus", "neuter"), ("Gebäude", "neuter"))
+    assert house.translations == (("Haus", "neuter"), ("Gebäude", "neuter"), ("Zunft", "feminine"))
 
     sword = next(entry for entry in entries if entry.word == "sword")
     assert sword.translations == (("Schwert", "neuter"), ("Säbel", "masculine"))

@@ -50,7 +50,7 @@ def export_set(
                 ORDER BY freq_rank
                 LIMIT ? OFFSET ?
             )
-            ORDER BY en.freq_rank, tw.text
+            ORDER BY en.freq_rank, tw.id
             """,
             (limit, offset),
         ).fetchall()

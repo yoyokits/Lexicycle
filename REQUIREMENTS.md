@@ -21,6 +21,8 @@ Known limitations of the generated dictionary, detailed in `docs/DATA-SOURCES.md
 
 - [ ] **R-308** Improve sense selection so `go → gehen` rather than `machen`. The primary sense is currently just Wiktionary's first, which is often not the common meaning.
 - [ ] **R-509** Admit genuine phrasal verbs ("get in", "make up") as prompts while still rejecting phrase fragments ("as in", "what if").
+- [ ] **R-512** Key progress by word *text*, not by the generated integer id. `_insert_english` numbers words by frequency rank and `_insert_target` by target-language frequency, so **any** dictionary rebuild that adds or removes a word shifts every id after it — and `progress.db` stores those integers (English ids for forward practice, target-language ids for reverse). Existing progress then silently describes different words. Needs a `word_progress` migration keyed on text plus scope, touching `IProgressStore` and both session factories.
+- [ ] **R-513** Reject an answer spelled identically to its English prompt when a real alternative exists (`line → Line`, `fork → Fork`). 456 words are affected, but for 326 of them the identical spelling is the *only* answer (`hotel`, `Buddha`, `CD`), so the rule has to keep those rather than empty the word out.
 - [ ] **R-510** Filter untagged regional forms. Frequency ordering catches `Liab` and `Ziit`, but `home → Ham | Heim | …` still leads with a regionalism because `Ham` scores as ordinary German.
 
 ## Phase 4 — OCR photo input

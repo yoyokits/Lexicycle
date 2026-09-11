@@ -44,7 +44,9 @@ def rows() -> list[dict]:
             "translations": [
                 translation("Haus", "building", ["neuter"]),
                 translation("Gebäude", "building", ["neuter"]),
-                # A later sense must not leak into the answers.
+                # A second, much rarer sense. Extraction keeps it as a candidate; it is
+                # frequency ranking in database.build_database that decides whether it
+                # is common enough to become an answer.
                 translation("Zunft", "guild", ["feminine"]),
             ],
         },

@@ -173,7 +173,7 @@ def build_database(
 
         english_pos = {term: english.get(term) for term in english_terms}
         english_ids = _insert_english(connection, english_terms, ranks, english_pos)
-        target_ids = _insert_target(connection, target, target_language)
+        target_ids = _insert_target(connection, target, target_language, target_rank_lookup)
 
         connection.executemany(
             f"INSERT OR IGNORE INTO translations (en_id, {target_language}_id) "
@@ -234,11 +234,20 @@ def _insert_target(
     connection: sqlite3.Connection,
     genders: dict[str, str | None],
     target_language: str,
+    rank_lookup: RankLookup,
 ) -> dict[str, int]:
-    rows = [
-        (index, word, genders[word])
-        for index, word in enumerate(sorted(genders), start=1)
-    ]
+    """Write the target-language words, **most common first**.
+
+    Ids are handed out in frequency order rather than alphabetically because id order is
+    the only thing that survives into the app: the reader joins with
+    ``ORDER BY en.id, tw.id`` and shows ``answers[0]`` when a word is missed. Sorting
+    alphabetically threw away the ranking `_best_answers` had just computed and let ASCII
+    decide the answer a learner sees — uppercase nouns sort before lowercase verbs, so
+    "run" displayed *Schnellgang* ("overdrive") ahead of *laufen*, and "feel" displayed
+    *Haptik* ahead of *spüren*.
+    """
+    ordered = sorted(genders, key=lambda word: (rank_lookup(word), word))
+    rows = [(index, word, genders[word]) for index, word in enumerate(ordered, start=1)]
     connection.executemany(
         f"INSERT INTO words_{target_language} (id, text, gender) VALUES (?, ?, ?)", rows
     )

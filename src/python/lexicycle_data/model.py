@@ -48,9 +48,6 @@ STOPWORDS = frozenset(
 #: Fragments that are morphology rather than words, e.g. "-ste", "am ...-sten".
 _NOT_A_WORD = re.compile(r"(^-)|(-$)|(\.\.\.)")
 
-#: Answers beyond this many make a prompt ambiguous rather than rich.
-MAX_ANSWERS = 4
-
 #: Trailing round-bracket qualifier, e.g. "Haus (Gebäude)". Safe to drop.
 _PARENTHETICAL = re.compile(r"\s*\([^)]*\)\s*$")
 
@@ -131,43 +128,27 @@ def _is_rejected(tags: Any) -> bool:
     return bool({str(tag).lower() for tag in tags} & REJECTED_TAGS)
 
 
-def primary_sense_translations(translations: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Keep only the translations belonging to the entry's first sense.
-
-    A word like "run" carries 41 German translations spread over dozens of senses. All
-    of them as acceptable answers would make the question meaningless, so the pipeline
-    drills the primary sense — the one Wiktionary lists first.
-    """
-    translations = list(translations)
-    if not translations:
-        return []
-
-    first_sense = translations[0].get("sense")
-
-    # Entries with no sense labels at all are short and unambiguous; keep them whole.
-    if first_sense is None:
-        return [t for t in translations if t.get("sense") is None]
-
-    return [t for t in translations if t.get("sense") == first_sense]
-
-
 def extract_translations(
     translations: Any, language_code: str
 ) -> tuple[tuple[str, str | None], ...]:
-    """Terms in ``language_code`` for the primary sense, de-duplicated, order preserved.
+    """Terms in ``language_code`` from **every** sense, de-duplicated, order preserved.
 
-    The primary sense is picked across every language present, then narrowed to the one
-    language asked for — a distilled row can carry German and Spanish translations
-    together, grouped by sense in upstream order, so language-filtering has to happen
-    *after* the sense is chosen or a language absent from that row's first block would
-    wrongly appear to have no primary sense at all.
+    One English word often means several different things, and each meaning has its own
+    target-language word: "run" is `laufen`/`rennen` but also `fließen`, "drop" is
+    `fallen` but also `abnehmen`. All of them are correct answers to the bare prompt, so
+    all of them are candidates here.
+
+    Nothing is truncated at this stage. `database.build_database` ranks the candidates by
+    real-world frequency and keeps the best few, which is what stops a word with a long
+    tail of obscure senses from collecting meaningless answers — frequency decides that,
+    not the order Wiktionary happens to list senses in.
     """
     if not translations:
         return ()
 
     found: dict[str, str | None] = {}
 
-    for translation in primary_sense_translations(translations):
+    for translation in translations:
         if not isinstance(translation, dict):
             continue
 
@@ -186,11 +167,11 @@ def extract_translations(
         gender = extract_gender(tags)
 
         # First occurrence wins, but fill in a gender discovered on a later duplicate.
+        # The same word often appears under several senses ("laufen" for both "to move
+        # quickly" and "to move quickly on two feet"); it is one answer, not two.
         if term not in found or (found[term] is None and gender is not None):
             found[term] = gender
 
-    # Not truncated here: the answers are ordered and capped in database.build_database,
-    # which has the target-language frequency lookup needed to tell Liebe from Liab.
     return tuple(found.items())
 
 

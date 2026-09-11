@@ -26,8 +26,13 @@ data/dist/                      generated dictionary
 
 ## Key constraints
 
-- **v1 is one-to-one translations.** `house` → `Haus`. Not full dictionary entries, not
-  multi-sense disambiguation.
+- **A prompt accepts every common answer, across all its senses** — "run" takes `laufen`,
+  `rennen` *and* `fließen`, because each is a correct translation of the bare word
+  (R-511). What it is *not* is disambiguation: the app never says which meaning it wants,
+  shows no per-sense hint or example, and grades only whether the answer is *a* correct
+  one. Answers are stored most-common-first; the first is what a miss reveals. Breadth is
+  bounded by target-language frequency (`MAX_ANSWERS`, `_RANK_GAP` in `database.py`),
+  never by sense labels — see `docs/DATA-SOURCES.md`.
 - **No word is ever asked twice.** Every session is ≥80% material never seen before; the
   rest is failure-weighted revision, and nothing from the previous session. A pool with
   nothing new left yields an *empty* session, never a replay. Read the selection rules in
