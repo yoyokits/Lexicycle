@@ -56,7 +56,9 @@ public sealed partial class SummaryViewModel : ObservableObject, IQueryAttributa
         MissedWords.Clear();
         foreach (var score in summary.MissedWords)
         {
-            MissedWords.Add(new MissedWordRow(score.Word.Source, score.Word.PrimaryAnswer, score.MissCount));
+            // Every accepted answer, matching what the miss itself revealed — this list is
+            // the review the learner actually reads back afterwards.
+            MissedWords.Add(new MissedWordRow(score.Word.Source, score.Word.AllAnswers, score.MissCount));
         }
 
         OnPropertyChanged(nameof(HasMissedWords));

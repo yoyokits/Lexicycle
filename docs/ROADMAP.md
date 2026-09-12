@@ -59,8 +59,20 @@ the next rung — 10, 50, 100, 500, 1000, then every further thousand — and pa
 congratulated on the summary screen. The rungs are close together early, where a beginner
 needs to see movement, and widen once progress is steady.
 
-Still open: reverse-direction practice (R-305), the attribution screen (R-306), and a
-global reset (R-323 — per-set restart landed with R-310).
+The dictionary, bands, and progress scoping are all pair-parameterised
+(`LanguagePair`) rather than English-German-specific, so a second pair is bundling a
+second `.db` file, not new code — see `docs/DATA-SOURCES.md` and R-504.
+
+A direction toggle on the home screen (R-305) swaps any pair between "en → de" and
+"de → en" without a second dictionary: the same curated `translations` rows are read
+backwards, target-language word in, English answer out, with their own progress scope
+and session rotation entirely separate from the forward direction. Gender hints and real
+frequency ordering are forward-only concepts — English has no grammatical gender to hint
+at, and reversed ordering is an approximation from the English side's `freq_rank`, since
+the pipeline never ranks German or Spanish frequency on its own. See `docs/ARCHITECTURE.md`.
+
+Still open: the attribution screen (R-306) and a global reset (R-323 — per-set restart
+landed with R-310).
 
 ## Phase 4 — OCR photo input
 
@@ -87,10 +99,14 @@ Session history, spaced repetition and frequency-banded practice all landed earl
 Phase 3 — session generation needed the first two to avoid repeating words, and the
 bands replaced the starter sets that were too small to be useful.
 
-**There is no Spanish content.** `en-es-basics.json` went with the other starter sets, and
-the dictionary is English→German only. Restoring it means R-504 rather than a new JSON
-file: the English Wiktionary carries translations for every language, so another pair is a
-filter change in the pipeline.
+**English-Spanish ships alongside English-German (R-504).** The pipeline, `LanguagePair`,
+per-pair progress scoping and the home screen's language switcher are all
+pair-parameterised; `lexicycle-dict-en-es.db` is generated, spot-checked (R-307) and
+bundled the same way as German. Verified on-device: the switcher lists both languages,
+switching recomputes the bands and Practice subtitle for the selected pair, a real
+Spanish session grades answers and shows gender hints correctly, and each pair's word
+count and milestone stay independent of the other's. `de-es` remains out of scope — see
+`docs/DATA-SOURCES.md`.
 
 The 4.45 GB `de-wiktionary-sqlite-full` dataset becomes worth revisiting here, for
 examples and IPA.

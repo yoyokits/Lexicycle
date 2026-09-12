@@ -1,7 +1,7 @@
 """Fixtures shaped exactly like the upstream rows, so no 3.2 GB download is needed.
 
 Field names and nesting match the English Wiktionary extract after the download step's
-distillation: word / pos / lang_code / translations[{word, sense, tags, english}].
+distillation: word / pos / lang_code / translations[{word, sense, tags, code, english}].
 """
 
 from __future__ import annotations
@@ -14,9 +14,18 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
-def translation(word: str, sense: str | None = None, tags: list[str] | None = None) -> dict:
-    """One entry of the upstream ``translations`` list, German side."""
-    entry: dict = {"word": word}
+def translation(
+    word: str,
+    sense: str | None = None,
+    tags: list[str] | None = None,
+    code: str = "de",
+) -> dict:
+    """One entry of the upstream ``translations`` list.
+
+    Defaults to German (``code="de"``) since that is what most of this fixture data
+    exercises; pass ``code="es"`` for the handful of tests covering a second language.
+    """
+    entry: dict = {"word": word, "code": code}
     if sense is not None:
         entry["sense"] = sense
     if tags:
@@ -35,7 +44,9 @@ def rows() -> list[dict]:
             "translations": [
                 translation("Haus", "building", ["neuter"]),
                 translation("Gebäude", "building", ["neuter"]),
-                # A later sense must not leak into the answers.
+                # A second, much rarer sense. Extraction keeps it as a candidate; it is
+                # frequency ranking in database.build_database that decides whether it
+                # is common enough to become an answer.
                 translation("Zunft", "guild", ["feminine"]),
             ],
         },
@@ -105,6 +116,17 @@ def rows() -> list[dict]:
             "pos": "noun",
             "lang_code": "en",
             "translations": [],
+        },
+        {
+            # A distilled row carries every configured target language's translations
+            # together, grouped by sense — German and Spanish here share one sense.
+            "word": "love",
+            "pos": "noun",
+            "lang_code": "en",
+            "translations": [
+                translation("Liebe", "affection", ["feminine"], code="de"),
+                translation("amor", "affection", ["masculine"], code="es"),
+            ],
         },
         {
             # A row from another language edition must be ignored.

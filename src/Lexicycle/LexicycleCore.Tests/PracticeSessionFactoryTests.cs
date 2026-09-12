@@ -26,9 +26,9 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
 
         BuildDictionary(_dictionaryPath, words: 40);
 
-        _dictionary = new SqliteDictionaryStore(_dictionaryPath);
+        _dictionary = new SqliteDictionaryStore(_dictionaryPath, "de");
         _progress = new SqliteProgressStore(_progressPath);
-        _factory = new PracticeSessionFactory(_dictionary, _progress);
+        _factory = new PracticeSessionFactory(LanguagePair.German, _dictionary, _progress);
 
         await Task.CompletedTask;
     }
@@ -153,7 +153,7 @@ public sealed class PracticeSessionFactoryTests : IAsyncLifetime
 
         // A fresh store over the same file, as after an app restart.
         _progress = new SqliteProgressStore(_progressPath);
-        _factory = new PracticeSessionFactory(_dictionary, _progress);
+        _factory = new PracticeSessionFactory(LanguagePair.German, _dictionary, _progress);
 
         var second = await _factory.CreateAsync(size: 10);
 

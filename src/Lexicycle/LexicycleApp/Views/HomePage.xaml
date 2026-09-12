@@ -3,7 +3,7 @@
     x:Class="LexicycleApp.Views.HomePage"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    xmlns:models="clr-namespace:LexicycleCore.Models;assembly=LexicycleCore"
+    xmlns:dictionary="clr-namespace:LexicycleCore.Dictionary;assembly=LexicycleCore"
     xmlns:vm="clr-namespace:LexicycleApp.ViewModels"
     x:DataType="vm:HomeViewModel"
     Title="Lexicycle">
@@ -14,6 +14,61 @@
             <Label
                 Style="{StaticResource SubtleLabel}"
                 Text="Missed words come back each round until you get them right." />
+
+            <!--
+                The language switcher. Hidden entirely when only one pair's dictionary is
+                bundled, which is the common case until a second pair is generated and
+                shipped — see docs/DATA-SOURCES.md.
+            -->
+            <CollectionView
+                IsVisible="{Binding HasLanguageChoice}"
+                ItemsLayout="HorizontalList"
+                ItemsSource="{Binding AvailablePairs}"
+                SelectionMode="None">
+
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="dictionary:LanguagePair">
+                        <Border
+                            Margin="0,0,8,0"
+                            Padding="14,8"
+                            Stroke="{StaticResource Primary}"
+                            StrokeThickness="1">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="16" />
+                            </Border.StrokeShape>
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer
+                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:HomeViewModel}}, Path=SelectPairCommand}"
+                                    CommandParameter="{Binding .}" />
+                            </Border.GestureRecognizers>
+
+                            <Label FontAttributes="Bold" FontSize="13" Text="{Binding Name}" />
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <!--
+                Direction toggle (R-305). A standalone control rather than folded into the
+                Practice/band cards' own direction badges — nesting a second tap target
+                inside an already-tappable Border risks both gestures firing on some
+                platforms, and "which way round" is a page-level setting anyway, not a
+                per-card action.
+            -->
+            <Border
+                HorizontalOptions="Start"
+                Padding="12,6"
+                Stroke="{StaticResource Primary}"
+                StrokeThickness="1">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="14" />
+                </Border.StrokeShape>
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding ToggleDirectionCommand}" />
+                </Border.GestureRecognizers>
+
+                <Label FontAttributes="Bold" FontSize="13" Text="{Binding DirectionLabel, StringFormat='⇄ {0}'}" />
+            </Border>
 
             <!--  The dictionary-backed session: different words every time.  -->
             <Border Style="{StaticResource Card}">
@@ -41,7 +96,7 @@
                         Grid.Column="1"
                         FontAttributes="Bold"
                         FontSize="14"
-                        Text="en → de"
+                        Text="{Binding DirectionLabel}"
                         TextColor="{StaticResource Primary}"
                         VerticalOptions="Center" />
                 </Grid>
@@ -94,7 +149,7 @@
                                 Grid.Column="1"
                                 FontAttributes="Bold"
                                 FontSize="14"
-                                Text="en → de"
+                                Text="{Binding Source={RelativeSource AncestorType={x:Type vm:HomeViewModel}}, Path=DirectionLabel}"
                                 TextColor="{StaticResource Primary}"
                                 VerticalOptions="Center" />
                         </Grid>

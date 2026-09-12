@@ -26,10 +26,15 @@ by [wiktextract](https://github.com/tatuylonen/wiktextract) and published by
 Everything needed is present and clean: whole-word translations, **gender on the
 translation itself**, and a `sense` gloss that separates meanings.
 
-The full extract is ~3.2 GB of JSONL. The `download` step streams it and writes a
-distilled, gzipped file holding only entries that have German translations and only the
-fields the pipeline uses — a small fraction of the size. Nothing large is stored, and
-extraction rules can be re-tuned offline without re-fetching.
+The full extract is ~3.2 GB of JSONL. The `download` step streams it once and writes a
+distilled, gzipped file holding only entries that have a translation into one of
+`sources.TARGET_LANGUAGES` (German and Spanish, by default) and only the fields the
+pipeline uses — a small fraction of the size. Nothing large is stored, and extraction
+rules can be re-tuned offline without re-fetching.
+
+Every configured language is captured in the same pass, so a second pair is **only** a
+`build --pair en-es` away — it never means downloading the 3.2 GB extract again. See
+"Adding a language pair" below.
 
 ## Why the German edition was rejected
 
@@ -80,15 +85,16 @@ Implemented in `src/python/lexicycle_data/model.py`, and covered by tests.
 | Rule | Reason |
 | --- | --- |
 | Keep only `lang_code == "en"` rows | Guards against a mixed dump |
-| Keep only translations whose `code`/`lang_code` is `de` | v1 is the en-de pair |
+| Keep only translations whose `code`/`lang_code` matches the pair being built | A distilled row can carry several target languages' translations together; `build --pair en-es` and `build --pair en-de` read the same file and each keeps only its own |
 | Keep only `pos` in noun / verb / adj / adv | `the → der \| die \| das` is not vocabulary worth drilling |
-| Keep only the **primary sense's** translations | "run" carries 41 German translations across dozens of senses; accepting all of them makes the question meaningless |
+| Keep **every sense's** translations as candidates | One English word usually means several things, and each meaning has its own target-language word: "run" is `laufen`/`rennen` but also `fließen`; "drop" is `fallen` but also `abnehmen`. All are correct answers to a bare prompt. Breadth is bounded by the frequency rule below, not by which sense Wiktionary lists first |
 | Reject multi-word English prompts | Wiktionary headwords include phrases ("as in", "what if") that are not vocabulary. Costs us genuine phrasal verbs too — see R-509 |
 | Reject English function words by stoplist | They arrive as adverbs and nouns, but `in → herein` and `that → dermaßen` are grammar, not vocabulary |
 | Drop translations tagged obsolete, archaic, rare, dated, misspelling, nonstandard | Poor answers to require |
 | Drop translations tagged with a **regional variant** (Alemannic, Swiss, Bavarian, Palatine, Rhine-Franconian, Low German, dialectal, colloquial, slang) | Wiktionary lists dialect forms beside the standard word, so "time" otherwise collects Zeit, Zit, Ziit and zeid as equally valid |
 | Reject terms with a leading/trailing `-` or containing `...` | `"-ste"` and `"am ...-sten"` are endings, not words |
-| Order answers by **German** frequency and keep the best 4, dropping any far rarer than the best | Source order does not put the standard word first — "love" offers `Liab` before `Liebe` — so frequency, not position, picks the answer shown to the learner |
+| Order answers by **target-language** frequency and keep the best 4, dropping any far rarer than the best | Source order does not put the standard word first — "love" offers `Liab` before `Liebe` — so frequency, not position, picks the answer shown to the learner. This is also what bounds sense breadth: a rare secondary sense (`house` → `Zunft`, "guild") falls outside the rank gap and never becomes an answer |
+| Store answers **most common first** | Id order is the only ordering that survives into the app, which reads answers back with `ORDER BY tw.id` and shows the first one when a word is missed. Assigning ids alphabetically threw the ranking away and let ASCII choose: uppercase nouns sort before lowercase verbs, so "run" displayed `Schnellgang` ("overdrive") ahead of `laufen`, and "feel" displayed `Haptik` ahead of `spüren` |
 | Strip a trailing `(...)` qualifier | `"Säbel (curved)"` → `"Säbel"` |
 | Reject terms containing `[ ] { } < > \| / ; … "` | Square brackets wrap glosses. Stripping them would leave a plausible-looking but wrong term |
 | Reject terms of more than three words | Those are explanations, not vocabulary. The limit still admits "sich freuen" and separable verbs |
@@ -117,47 +123,102 @@ score. Multi-word terms take the score of their rarest word, so "ice cream" rank
 
 ## Generated schema
 
+One database holds one language pair. The target-language table and its half of the join
+table are named after the language code, so `words_de`/`de_id` for German and
+`words_es`/`es_id` for Spanish — `database.schema_for(target_language)` generates it:
+
 ```sql
 CREATE TABLE words_en (id INTEGER PRIMARY KEY, text TEXT NOT NULL UNIQUE,
                        pos TEXT, freq_rank INTEGER);
-CREATE TABLE words_de (id INTEGER PRIMARY KEY, text TEXT NOT NULL UNIQUE,
-                       gender TEXT);
+CREATE TABLE words_<lang> (id INTEGER PRIMARY KEY, text TEXT NOT NULL UNIQUE,
+                           gender TEXT);
 CREATE TABLE translations (en_id INTEGER NOT NULL REFERENCES words_en(id),
-                           de_id INTEGER NOT NULL REFERENCES words_de(id),
-                           PRIMARY KEY (en_id, de_id)) WITHOUT ROWID;
+                           <lang>_id INTEGER NOT NULL REFERENCES words_<lang>(id),
+                           PRIMARY KEY (en_id, <lang>_id)) WITHOUT ROWID;
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ```
 
 `schema_version` is **2**; version 1 was the abandoned German-edition layout, which
 carried `pos` on `words_de`. Enrichment arrives as nullable columns or side tables, so no
-breaking migration is needed.
+breaking migration is needed. Adding a language is a second *database file*, never a
+wider schema — see below.
+
+## Adding a language pair
+
+The pipeline is pair-parameterised by design; English-Spanish shipping alongside
+English-German is a configuration change, not a redesign:
+
+```bash
+python -m lexicycle_data download                   # captures every TARGET_LANGUAGES code
+python -m lexicycle_data build --pair en-es --top-n 0
+cp data/dist/lexicycle-dict-en-es.db src/Lexicycle/LexicycleApp/Resources/Raw/
+```
+
+`download` only needs re-running if `sources.TARGET_LANGUAGES` gains a code that an
+existing distilled file does not carry — the default already includes `de` and `es`, so
+most of the time `build --pair en-es` alone is enough against a distilled file fetched
+for German. The app's `LanguagePair.All` (`LexicycleCore/Dictionary/LanguagePair.cs`)
+needs the new pair added to the list; `AppDatabases` then copies in whichever bundled
+`.db` files it finds and the home screen's language switcher appears automatically once
+there is more than one.
+
+A wholly new **third** language needs one addition: its code in
+`sources.TARGET_LANGUAGES`, so the next `download` captures it. Everything downstream —
+`model.py`, `database.py`, `SqliteDictionaryStore` — already takes the target language as
+a parameter rather than assuming German.
 
 ## Size
 
-Measured with `python -m lexicycle_data report`. The extract holds 1,492,836 rows, of
-which **3,805 English lemmas survive extraction** with at least one German translation.
+Measured with `python -m lexicycle_data report --pair en-de`. The extract holds
+1,492,836 rows, of which **3,806 English lemmas survive extraction** with at least one
+German translation.
 
 | top-N | EN words | DE words | pairs | size |
 | --- | --- | --- | --- | --- |
-| 1,000 | 1,000 | 1,538 | 1,652 | 184 KB |
-| 5,000 | 3,670 | 5,154 | 5,550 | 536 KB |
-| all | 3,670 | 5,154 | 5,550 | **536 KB** |
+| 1,000 | 1,000 | 1,648 | 1,798 | 196 KB |
+| 5,000 | 3,671 | 5,342 | 5,828 | 552 KB |
+| all | 3,671 | 5,342 | 5,828 | **552 KB** |
 
-The whole dictionary is 536 KB, so the top-N cut is moot — ship all of it. Size was never
-the binding constraint; quality was.
+The whole dictionary is 552 KB, so the top-N cut is moot — ship all of it. Size was never
+the binding constraint; quality was. The **en-es** dictionary, generated the same way, is
+3,689 English words / 5,211 Spanish words / 5,664 pairs at 536 KB — run `report --pair
+en-es` for the full breakdown by top-N.
+
+Accepting every sense (rather than only the first) added 311 pairs and 23 words to
+en-de — a 5.6% increase, with the longest answer list unchanged at 8. Breadth is
+bounded by the frequency rule, not by the number of senses.
 
 Note that only ~5,100 English entries carry a translations table at all. Wiktionary
 attaches translations to a fraction of its headwords, and the extraction rules below then
-remove roughly a quarter of those. 3,670 drillable words is a solid beginner-to-
-intermediate vocabulary, not a comprehensive dictionary.
+remove roughly a quarter of those. ~3,670 drillable words is a solid beginner-to-
+intermediate vocabulary, not a comprehensive dictionary. These counts drift a little
+between runs — kaikki.org's extract is refreshed periodically, so a re-`download` is
+never byte-identical to the last one.
 
 ## Known limitations
 
 Honest about what the data still gets wrong, so nobody re-discovers it:
 
-- **Primary-sense selection is only as good as Wiktionary's sense order.** `go → machen`
-  and `give → nachgeben` are both first-sense artefacts; the obvious answers are `gehen`
-  and `geben`. Fixing this needs sense ranking rather than "take the first".
+- **Wiktionary's translation tables are incomplete, and no extraction rule can fix that.**
+  `go → machen` and `give → nachgeben` look like sense-selection bugs and were once
+  documented as such. They are not: dumping the raw rows shows `go` has exactly **one**
+  German translation in the extract (`machen`, under "to make a specified sound") and
+  `give` exactly one (`nachgeben`). `gehen` and `geben` are absent altogether, as are
+  `führen`/`betreiben` for "run a business" and `wissen` for "know". Volunteers fill
+  translation tables in per sense and per language, so common senses can simply be
+  missing. Supplementing them by hand would need an override file the pipeline merges
+  in — deliberately not built.
+- **A more frequent word can outrank a more precise one.** Answers are shown
+  most-common-first, and German frequency is not a measure of translation quality:
+  "Lady" leads with `Frau` over `Dame`, "Satan" with `Teufel` over `Satan`. Both remain
+  accepted answers; only the displayed one changes.
+- **Domain jargon rides along with everyday senses.** "fork" collects `Abspaltung`,
+  `Fork` and `Verzweigung` from computer-science senses beside the eating utensil, and
+  can lead with `spalten`. Filtering these needs the topic tags wiktextract sometimes
+  carries.
+- **456 English words have an answer spelled identically to the prompt** (`hotel`,
+  `Buddha`, `line → Line`). For 326 of them it is the only answer, so a blanket filter
+  would delete legitimate loanword pairs; a narrower rule is untried.
 - **Untagged dialect forms survive when they are common enough.** German frequency
   ordering removes `Liab`, `Ziit` and `kemma`, but `home → Ham | Heim | …` still leads
   with a regionalism because `Ham` scores as a real German word.

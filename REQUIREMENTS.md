@@ -10,7 +10,6 @@ Phases are described in `docs/ROADMAP.md`.
 
 ## Phase 3 — Dictionary in the app
 
-- [ ] **R-305** Practise German → English as well as English → German (reverse the pair at session start).
 - [ ] **R-306** About screen crediting Wiktionary and the upstream dataset under CC-BY-SA 4.0.
 - [ ] **R-323** A global "reset all progress" action. Per-set restart exists (R-310), but `IProgressStore.ResetAsync`, which clears every scope including the dictionary, still has no caller.
 - [ ] **R-311** Show *mastery* on the home screen. The milestone bar (R-313) counts words answered correctly at least once, which is a weaker thing than reaching `ReviewSchedule.MasteredBox`; neither the home screen nor anywhere else surfaces the box a word has climbed to.
@@ -22,6 +21,8 @@ Known limitations of the generated dictionary, detailed in `docs/DATA-SOURCES.md
 
 - [ ] **R-308** Improve sense selection so `go → gehen` rather than `machen`. The primary sense is currently just Wiktionary's first, which is often not the common meaning.
 - [ ] **R-509** Admit genuine phrasal verbs ("get in", "make up") as prompts while still rejecting phrase fragments ("as in", "what if").
+- [ ] **R-512** Key progress by word *text*, not by the generated integer id. `_insert_english` numbers words by frequency rank and `_insert_target` by target-language frequency, so **any** dictionary rebuild that adds or removes a word shifts every id after it — and `progress.db` stores those integers (English ids for forward practice, target-language ids for reverse). Existing progress then silently describes different words. Needs a `word_progress` migration keyed on text plus scope, touching `IProgressStore` and both session factories.
+- [ ] **R-513** Reject an answer spelled identically to its English prompt when a real alternative exists (`line → Line`, `fork → Fork`). 456 words are affected, but for 326 of them the identical spelling is the *only* answer (`hotel`, `Buddha`, `CD`), so the rule has to keep those rather than empty the word out.
 - [ ] **R-510** Filter untagged regional forms. Frequency ordering catches `Liab` and `Ziit`, but `home → Ham | Heim | …` still leads with a regionalism because `Ham` scores as ordinary German.
 
 ## Phase 4 — OCR photo input
@@ -36,7 +37,6 @@ Known limitations of the generated dictionary, detailed in `docs/DATA-SOURCES.md
 
 - [ ] **R-501** Show grammatical gender and part of speech during practice (gender is in `words_de`, part of speech in `words_en`).
 - [ ] **R-502** Example sentences, sourced from the fuller upstream dataset, as a side table.
-- [ ] **R-504** Additional language pairs (`en-es`, `de-es`) via the pair-parameterised pipeline. The English edition carries translations for every language, so this is a filter change rather than a new source.
 - [ ] **R-508** German→English practice sourced from the German edition, where its English-side fragmentation does not matter.
 - [ ] **R-505** User-created and imported vocabulary sets.
 

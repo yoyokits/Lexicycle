@@ -11,13 +11,21 @@ so every word has been answered correctly at least once.
 
 Android, offline, no backend.
 
-- **Working now:** the trainer, a bundled English–German dictionary generated from
-  Wiktionary — 3,545 prompts against 5,154 German words — and sessions that remember what
-  you have seen. **No word is ever asked twice.** Each session is at least 80% material
-  you have never met, most common first, with a small slice of revision weighted towards
-  what you get wrong.
+- **Working now:** the trainer, bundled English–German and English–Spanish dictionaries
+  generated from Wiktionary — a few thousand prompts each (see
+  [`docs/DATA-SOURCES.md`](docs/DATA-SOURCES.md) for exact counts) — and sessions that
+  remember what you have seen. **No word is ever asked twice.** Each session is at least
+  80% material you have never met, most common first, with a small slice of revision
+  weighted towards what you get wrong.
 - **Pick your level:** Basics (the 1,000 most common words), Common words (the next
   1,000), or Wider vocabulary — or Practice straight through the whole dictionary.
+- **More than one language:** the dictionary, progress tracking, and every screen are
+  built around language pairs rather than English-German specifically. English-Spanish
+  ships alongside it, and a language switcher appears on the home screen once more than
+  one pair's dictionary is bundled — each pair keeps its own progress and milestone.
+- **Practise either direction:** a toggle on the home screen swaps any pair between,
+  say, "en → de" and "de → en" — no second dictionary needed, and each direction keeps
+  its own progress, since recognising a word cold is a different skill from producing it.
 - **Next:** OCR — photograph a book page and practise the words on it.
 
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the plan and

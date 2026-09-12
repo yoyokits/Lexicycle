@@ -12,8 +12,31 @@ public sealed record WordOutcome(int WordId, bool AnsweredCorrectly, int Misses)
 /// </summary>
 public static class ProgressScope
 {
-    /// <summary>The generated dictionary behind the Practice session.</summary>
+    /// <summary>
+    /// The generated English-German dictionary behind the original Practice session.
+    /// Kept as a bare literal — not <c>ForDictionary("en-de")</c> — because every
+    /// installed copy's existing progress was written under this exact key before
+    /// language pairs existed; changing it would silently orphan real learners' history.
+    /// </summary>
     public const string Dictionary = "dictionary";
+
+    /// <summary>
+    /// The generated dictionary for one language pair and direction (R-305). Forward
+    /// English-German keeps the legacy unscoped key so existing progress is not orphaned;
+    /// every other combination gets its own. Forward and reversed practice of the *same*
+    /// pair are deliberately separate scopes — they draw on different id spaces (English
+    /// word ids forward, target-language word ids reversed) and are different skills, so
+    /// a word learned one way is not counted as learned the other.
+    /// </summary>
+    public static string ForDictionary(string pairId, bool reversed = false)
+    {
+        if (!reversed && pairId == "en-de")
+        {
+            return Dictionary;
+        }
+
+        return reversed ? $"dictionary:{pairId}:reverse" : $"dictionary:{pairId}";
+    }
 
     /// <summary>A bundled or imported set is scoped by its own id.</summary>
     public static string ForSet(string setId) => $"set:{setId}";

@@ -12,7 +12,7 @@ LexicycleApp  (net10.0-android, MAUI)
 LexicycleCore  (net10.0, no MAUI reference)
    Models/        WordPair, VocabularySet
    Session/       AnswerComparer, SessionEngine, SessionSummary
-   Dictionary/    IDictionaryStore, FrequencyBand, the two session factories
+   Dictionary/    IDictionaryStore, LanguagePair, FrequencyBand, the two session factories
    Progress/      IProgressStore, SessionComposer, ReviewSchedule, Milestones
    Services/      IVocabularySetRepository, IAssetProvider, bundled-JSON implementation
 ```
@@ -66,7 +66,36 @@ and the rules compose, so `die Straße` matches a typed `strasse`. Diacritics st
 is independent of the article rule, which is always on.
 
 A `WordPair` carries a list of acceptable answers, so "Auto" and "Wagen" both pass for
-"car". The first entry is what gets shown on a miss.
+"car", ordered most common first.
+
+**A miss reveals all of them** (`WordPair.AllAnswers`), on the session screen and again in
+the summary's "Worth another look" list: `like → gern, gern haben, gefallen, mögen`.
+Showing only the first taught that one word was *the* translation when any of the others
+would have been marked correct too — harmless while a prompt meant one thing, actively
+misleading since a prompt started carrying every sense's translation (R-511). Only the
+prompt is emboldened in the summary row; a whole comma-separated list in bold reads as a
+wall rather than as a list.
+
+## Language pairs
+
+`LanguagePair` (`LexicycleCore/Dictionary/LanguagePair.cs`) names one generated
+dictionary — English to some target language. `LanguagePair.All` currently lists German
+and Spanish; a pair whose bundled `.db` file is not present in this build (Spanish, until
+the pipeline is run for it — see `docs/DATA-SOURCES.md`) is skipped at load time by
+`AppDatabases.GetDictionaryAsync`, which returns null rather than throwing, so the home
+screen simply never offers it.
+
+Each pair is completely independent: its own bundled database
+(`lexicycle-dict-<pair>.db`), its own `SqliteDictionaryStore` (parameterised by target
+language, since the target-side table and column are named after the code —
+`words_de`/`de_id`, `words_es`/`es_id`), and its own progress scope (see Scoping below).
+Learning German words is never progress towards a Spanish milestone.
+
+The home screen's language switcher only appears once more than one pair's dictionary
+actually opened (`HomeViewModel.HasLanguageChoice`); with one pair bundled — today's
+default build — the switcher is invisible and the app behaves exactly as before pairs
+existed. The chosen pair is remembered in `AppSettings.SelectedPairId` so the app reopens
+on the language last practised rather than always defaulting to German.
 
 ## Generated sessions and progress
 
@@ -77,14 +106,18 @@ Two factories build sessions, and **both** consult progress:
 
 | Factory | Source | Session size |
 | --- | --- | --- |
-| `PracticeSessionFactory` | the generated dictionary, whole or one band | `DefaultSize` (10) |
+| `PracticeSessionFactory` | one pair's generated dictionary, whole or one band | `DefaultSize` (10) |
 | `FixedSetSessionFactory` | an OCR'd page (R-404) | `SizeFor(count)` |
 
 ### Bands, not starter sets
 
-The home screen offers **Practice** over the whole dictionary, plus `FrequencyBand.All`:
-Basics (the 1,000 most common), Common words (the next 1,000), Wider vocabulary (the
-rest).
+The home screen offers **Practice** over the whole of the selected pair's dictionary,
+plus that pair's `FrequencyBand.For(pair)`: Basics (the 1,000 most common), Common words
+(the next 1,000), Wider vocabulary (the rest). `FrequencyBand.All` is every pair's bands,
+in both directions (see "Reversed practice" below), together — used only to resolve a
+route id back to a band without knowing the pair up front; a band's `Id` carries its pair
+and direction (`"en-de:basics"` forward, `"en-de:reverse:basics"` reversed) so nothing
+collides.
 
 These replaced three hand-written JSON sets of **twelve words each**. Those were written
 in Phase 1, before the dictionary existed, and were never revisited once it did — a
@@ -101,27 +134,85 @@ vocabulary rather than separate courses: a word learned under Basics is never of
 
 `FixedSetSessionFactory` remains for externally supplied word lists. Its `SizeFor` takes
 **half the set**, capped at `DefaultSize`, so a set always yields at least two disjoint
-sessions before it is exhausted.
+sessions before it is exhausted. Fixed sets do not support reversed practice — the
+learner chose their exact words and direction, and there is nothing to reverse against.
+
+### Reversed practice (R-305)
+
+The home screen's direction toggle swaps the whole app between "en → de" and "de → en"
+(or the Spanish equivalent) — the prompt becomes the target-language word, and the
+learner types the English answer. Nothing is precomputed or regenerated for this: the
+same `translations` rows built for the forward direction already hold each English
+word's curated primary-sense answers, and `SqliteDictionaryStore` simply reads them the
+other way round, grouping by the target-language id instead of the English one.
+
+That reuse has one real consequence worth knowing: a handful of target-language words
+translate more than one English word (`Amt` → *office*, *trunk*; about 6.5% of German
+words in the shipped dictionary). Reversed, both become acceptable answers to the same
+prompt — exactly how multiple German answers to one English prompt already work forward.
+This is genuine polysemy already curated into the pairs table, not new ambiguity
+introduced by reversing it.
+
+Two things that exist forward have no reverse equivalent, and are simply absent rather
+than approximated:
+
+- **Gender hints.** English carries no grammatical gender, so a reversed `DictionaryWord`
+  always has a null `Hint`.
+- **A real frequency column for the target language.** The pipeline never ranks German or
+  Spanish frequency on its own — only English gets `freq_rank`. Reversed "most common
+  first" is approximated as the *best* `freq_rank` among the English words a target word
+  translates: a word that translates something common is, in practice, usually itself
+  common. See `SqliteDictionaryStore.Ordered`.
+
+Direction is a property of a `PracticeSessionFactory`/`SqliteDictionaryStore` call, not
+of a `LanguagePair` — the same pair practised either way. It is chosen on the home
+screen (`HomeViewModel.IsReversed`, persisted in `AppSettings.PracticeReversed`) and
+carried through the route id (`FrequencyBand.Reversed`, or a `:reverse` segment on a
+generated Practice id) so `SessionViewModel` can reconstruct it without a second query
+parameter.
 
 ### Scoping
 
-Word ids are unique only within a pool: the dictionary numbers words from `words_en`, a
-fixed set numbers its own words by position. `ProgressScope` keeps them apart —
-`"dictionary"` or `"set:<id>"` — and every progress query is scoped. All three bands share
-the `dictionary` scope, because they are slices of one pool.
+Word ids are unique only within a pool: each pair's dictionary numbers words from its own
+`words_en`, starting at 1 again for every pair; reversed, it numbers from the
+target-language table instead (also starting at 1) — a different id space from forward,
+not merely a different range of the same one. A fixed set numbers its own words by
+position. `ProgressScope` keeps all of this apart:
+
+- `ProgressScope.Dictionary` (`"dictionary"`) — **forward** English-German,
+  specifically. Kept as this exact bare literal rather than a derived key, because every
+  installed copy's progress was already written under it before language pairs or
+  reversed practice existed; changing it would silently orphan real learners' history.
+- `ProgressScope.ForDictionary(pairId, reversed)` — every other pair-and-direction
+  combination gets `"dictionary:<pair id>"` forward or `"dictionary:<pair id>:reverse"`
+  reversed; called with `("en-de", false)` it returns the legacy literal above, so
+  callers never need to special-case German.
+- `ProgressScope.ForSet(setId)` — a bundled or imported set, by its own id.
+
+Forward and reversed practice of the *same* pair are deliberately separate scopes, not
+just separately counted: they draw on different id spaces, and getting good at "house →
+Haus" does not mean the learner recognises "Haus" cold, so counting one as progress on
+the other would overstate what has actually been learned.
+
+All three bands of one pair and direction share that combination's dictionary scope,
+because they are slices of one pool; Basics and Practice in German never share a scope
+with Basics and Practice in Spanish, or with reversed German.
 
 **Session numbering is per-scope too.** A global counter would let dictionary practice
 advance a fixed set's rotation, so its no-repeat rule would be satisfied by sessions the
-learner never played there.
+learner never played there. The same reasoning keeps German, Spanish and reversed-German
+session counters apart.
 
-The milestone bar counts the dictionary scope only, so finishing an OCR'd page raises no
-milestone — it is not progress through the dictionary.
+The milestone bar counts the *selected pair and direction's* dictionary scope only, so
+finishing an OCR'd page raises no milestone, and learning Spanish words — or practising
+German backwards — does not push the forward German milestone forward or vice versa.
 
 **Word order depends on whether frequency is known.**
 
 - A *dictionary* session is presented **most common first**, which is the order worth
-  learning in. Its membership changes every session, so a deterministic order never feels
-  repetitive.
+  learning in — using the real `freq_rank` column forward, or the approximation
+  described under "Reversed practice" above when reversed. Its membership changes every
+  session, so a deterministic order never feels repetitive.
 - A *fixed* set has no frequency data, so `SessionViewModel` calls
   `VocabularySet.Shuffled()` on it.
 
@@ -189,13 +280,14 @@ version did drive selection through fixed per-box intervals; that was removed ra
 left in place, because two scheduling models with only one of them live is a trap for the
 next reader.
 
-Two database files, deliberately separate:
+Database files, deliberately separate from each other:
 
-- `lexicycle-dict-en-de.db` — the generated dictionary, bundled as a `MauiAsset` and
-  copied to app data on first run (a `MauiAsset` cannot be opened as a file on Android).
-  Read-only.
-- `progress.db` — created on demand in app data. Keeping it apart means shipping an
-  updated dictionary never discards a learner's history.
+- `lexicycle-dict-<pair>.db` — one per language pair (`lexicycle-dict-en-de.db`,
+  `lexicycle-dict-en-es.db`, ...), bundled as a `MauiAsset` and copied to app data on
+  first run (a `MauiAsset` cannot be opened as a file on Android). Read-only.
+- `progress.db` — one file, shared by every pair via `ProgressScope`, created on demand
+  in app data. Keeping it apart from the dictionaries means shipping an updated or
+  additional dictionary never discards a learner's history.
 
 ## The repository seam
 
