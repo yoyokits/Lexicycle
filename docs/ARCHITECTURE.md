@@ -66,7 +66,15 @@ and the rules compose, so `die Straße` matches a typed `strasse`. Diacritics st
 is independent of the article rule, which is always on.
 
 A `WordPair` carries a list of acceptable answers, so "Auto" and "Wagen" both pass for
-"car". The first entry is what gets shown on a miss.
+"car", ordered most common first.
+
+**A miss reveals all of them** (`WordPair.AllAnswers`), on the session screen and again in
+the summary's "Worth another look" list: `like → gern, gern haben, gefallen, mögen`.
+Showing only the first taught that one word was *the* translation when any of the others
+would have been marked correct too — harmless while a prompt meant one thing, actively
+misleading since a prompt started carrying every sense's translation (R-511). Only the
+prompt is emboldened in the summary row; a whole comma-separated list in bold reads as a
+wall rather than as a list.
 
 ## Language pairs
 

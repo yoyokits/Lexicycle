@@ -296,9 +296,11 @@ public sealed partial class SessionViewModel : ObservableObject, IQueryAttributa
             return;
         }
 
-        // On a miss, hold the screen until the user taps Next so the answer can be read.
+        // On a miss, hold the screen until the user taps Next so the answers can be read.
+        // Every accepted answer is shown, not just the best one: several are correct, and
+        // revealing one of them implies the others were wrong.
         FeedbackIsMiss = true;
-        FeedbackText = $"{result.Word.Source} → {result.CorrectAnswer}";
+        FeedbackText = $"{result.Word.Source} → {result.Word.AllAnswers}";
         AwaitingContinue = true;
     }
 
