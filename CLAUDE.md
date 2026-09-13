@@ -11,6 +11,7 @@ src/Lexicycle/LexicycleApp/     MAUI head (net10.0-android) — Views, ViewModel
 src/Lexicycle/LexicycleCore/    plain net10.0 library — models, engine, stores. No MAUI.
 src/Lexicycle/LexicycleCore.Tests/
 src/python/                     offline data tooling; NOT shipped in the app
+tools/                          one-off generators (the app icon); run by hand, rarely
 data/raw/                       downloaded Wiktionary data (gitignored)
 data/dist/                      generated dictionary
 ```
