@@ -80,6 +80,32 @@ Check the bands still make sense afterwards. They are positional windows, so the
 themselves, but a much smaller dictionary could leave one empty — the home screen hides
 any band with no words rather than showing a dead row.
 
+## App icon and splash
+
+`Resources/AppIcon/appicon.svg` (a plain white background), `appiconfg.svg` (the mark)
+and `Resources/Splash/splash.svg` are all **generated**, and all checked in — an
+ordinary build never regenerates them. Redraw them only when the mark itself changes:
+
+```bash
+pip install fonttools          # once; not part of src/python's dependencies
+python tools/make_icon.py
+```
+
+That rewrites all three SVGs and, if Inkscape is on `PATH`, the 512×512 Play Store
+listing icon at `docs/images/play-store-icon-512.png`. The two letters are baked in as
+outlines rather than `<text>`, because neither the build-time rasteriser nor whatever
+opens the SVG later can be assumed to have a CJK font.
+
+The icon's margin is not decoration. Android masks an adaptive icon down to a circle 66%
+of the layer and silently discards everything outside it, so `make_icon.py` computes the
+furthest point of the artwork and refuses to write anything past that radius. Keep the
+padding in the SVG rather than reaching for `ForegroundScale`, so the store tile, the
+adaptive icon and the pre-API-26 legacy icon all agree.
+
+The splash is the same artwork with that margin cropped away — nothing masks a splash,
+so there the padding would only make the mark smaller. It is cropped about the *centre*,
+not about the artwork's bounding box, which is what keeps it optically centred.
+
 ## Verification traps
 
 Every one of these produced a convincing false result. They cost real debugging time, so
